@@ -1,9 +1,10 @@
 import { LayoutDashboard, ArrowLeftRight, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
 
 const menuItems = [
-  { icon: ArrowLeftRight, label: "Transazioni", active: false },
-  { icon: Settings, label: "Impostazioni Mensili", active: false },
+  { icon: ArrowLeftRight, label: "Transazioni", path: "/transactions" },
+  { icon: Settings, label: "Impostazioni Mensili", path: "/monthly-settings" },
 ];
 
 const DashboardNav = () => {
@@ -19,8 +20,9 @@ const DashboardNav = () => {
           const Icon = item.icon;
           
           return (
-            <button
+            <Link
               key={item.label}
+              to={item.path}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
                 "bg-secondary text-secondary-foreground hover:bg-accent"
@@ -28,7 +30,7 @@ const DashboardNav = () => {
             >
               <Icon className="w-4 h-4" />
               {item.label}
-            </button>
+            </Link>
           );
         })}
       </div>
