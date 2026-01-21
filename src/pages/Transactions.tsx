@@ -1,8 +1,10 @@
+import { useState } from "react";
 import Header from "@/components/Header";
-import { ArrowLeft, Plus, Search, Filter, ArrowDownLeft, ArrowUpRight, ShoppingCart, Coffee, Wifi, Car, CreditCard, Home, Zap, Heart, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Plus, Search, Filter, ArrowDownLeft, ArrowUpRight, ShoppingCart, Coffee, Wifi, Car, CreditCard, Home, Zap, Heart, ShoppingBag, Trash2, Edit2, X, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -11,21 +13,150 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
-const transactions = [
-  { id: 1, description: "Supermercato", category: "Spesa", amount: -85.50, date: "21 Gen 2025", icon: ShoppingCart },
-  { id: 2, description: "Stipendio", category: "Entrata", amount: 2200.00, date: "21 Gen 2025", icon: CreditCard },
-  { id: 3, description: "Bar Centrale", category: "Ristorazione", amount: -4.50, date: "20 Gen 2025", icon: Coffee },
-  { id: 4, description: "Abbonamento Internet", category: "Utilities", amount: -29.99, date: "20 Gen 2025", icon: Wifi },
-  { id: 5, description: "Benzina", category: "Trasporti", amount: -55.00, date: "18 Gen 2025", icon: Car },
-  { id: 6, description: "Affitto", category: "Casa", amount: -650.00, date: "15 Gen 2025", icon: Home },
-  { id: 7, description: "Bolletta Luce", category: "Utilities", amount: -78.50, date: "14 Gen 2025", icon: Zap },
-  { id: 8, description: "Palestra", category: "Salute", amount: -35.00, date: "12 Gen 2025", icon: Heart },
-  { id: 9, description: "Shopping Online", category: "Shopping", amount: -120.00, date: "10 Gen 2025", icon: ShoppingBag },
-  { id: 10, description: "Rimborso Spese", category: "Entrata", amount: 150.00, date: "08 Gen 2025", icon: CreditCard },
+const iconOptions = [
+  { value: "shoppingcart", icon: ShoppingCart, label: "Spesa" },
+  { value: "coffee", icon: Coffee, label: "Ristorazione" },
+  { value: "wifi", icon: Wifi, label: "Utilities" },
+  { value: "car", icon: Car, label: "Trasporti" },
+  { value: "creditcard", icon: CreditCard, label: "Pagamento" },
+  { value: "home", icon: Home, label: "Casa" },
+  { value: "zap", icon: Zap, label: "Energia" },
+  { value: "heart", icon: Heart, label: "Salute" },
+  { value: "shoppingbag", icon: ShoppingBag, label: "Shopping" },
 ];
 
+const categoryOptions = [
+  "Spesa", "Ristorazione", "Utilities", "Trasporti", "Entrata", "Casa", "Salute", "Shopping", "Altro"
+];
+
+const getIconComponent = (iconValue: string) => {
+  const found = iconOptions.find(opt => opt.value === iconValue);
+  return found ? found.icon : CreditCard;
+};
+
+interface Transaction {
+  id: number;
+  description: string;
+  category: string;
+  amount: number;
+  date: string;
+  icon: string;
+}
+
 const Transactions = () => {
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    { id: 1, description: "Supermercato", category: "Spesa", amount: -85.50, date: "2025-01-21", icon: "shoppingcart" },
+    { id: 2, description: "Stipendio", category: "Entrata", amount: 2200.00, date: "2025-01-21", icon: "creditcard" },
+    { id: 3, description: "Bar Centrale", category: "Ristorazione", amount: -4.50, date: "2025-01-20", icon: "coffee" },
+    { id: 4, description: "Abbonamento Internet", category: "Utilities", amount: -29.99, date: "2025-01-20", icon: "wifi" },
+    { id: 5, description: "Benzina", category: "Trasporti", amount: -55.00, date: "2025-01-18", icon: "car" },
+    { id: 6, description: "Affitto", category: "Casa", amount: -650.00, date: "2025-01-15", icon: "home" },
+    { id: 7, description: "Bolletta Luce", category: "Utilities", amount: -78.50, date: "2025-01-14", icon: "zap" },
+    { id: 8, description: "Palestra", category: "Salute", amount: -35.00, date: "2025-01-12", icon: "heart" },
+    { id: 9, description: "Shopping Online", category: "Shopping", amount: -120.00, date: "2025-01-10", icon: "shoppingbag" },
+    { id: 10, description: "Rimborso Spese", category: "Entrata", amount: 150.00, date: "2025-01-08", icon: "creditcard" },
+  ]);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [formData, setFormData] = useState({
+    description: "",
+    category: "Spesa",
+    amount: "",
+    date: new Date().toISOString().split('T')[0],
+    icon: "shoppingcart",
+    isIncome: false,
+  });
+
+  const filteredTransactions = transactions.filter(t =>
+    t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    t.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalIncome = transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const openAddDialog = () => {
+    setEditingTransaction(null);
+    setFormData({
+      description: "",
+      category: "Spesa",
+      amount: "",
+      date: new Date().toISOString().split('T')[0],
+      icon: "shoppingcart",
+      isIncome: false,
+    });
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setFormData({
+      description: transaction.description,
+      category: transaction.category,
+      amount: Math.abs(transaction.amount).toString(),
+      date: transaction.date,
+      icon: transaction.icon,
+      isIncome: transaction.amount > 0,
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!formData.description || !formData.amount) {
+      toast.error("Compila tutti i campi");
+      return;
+    }
+
+    const amount = parseFloat(formData.amount) * (formData.isIncome ? 1 : -1);
+    
+    const newTransaction: Transaction = {
+      id: editingTransaction?.id || Date.now(),
+      description: formData.description,
+      category: formData.category,
+      amount,
+      date: formData.date,
+      icon: formData.icon,
+    };
+
+    if (editingTransaction) {
+      setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? newTransaction : t));
+      toast.success("Transazione aggiornata");
+    } else {
+      setTransactions(prev => [newTransaction, ...prev]);
+      toast.success("Transazione aggiunta");
+    }
+
+    setDialogOpen(false);
+  };
+
+  const handleDelete = (id: number) => {
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    toast.success("Transazione eliminata");
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -42,7 +173,7 @@ const Transactions = () => {
               </Link>
               <h1 className="text-2xl font-bold text-foreground">Transazioni</h1>
             </div>
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={openAddDialog}>
               <Plus className="w-4 h-4" />
               Nuova Transazione
             </Button>
@@ -55,12 +186,10 @@ const Transactions = () => {
               <Input 
                 placeholder="Cerca transazioni..." 
                 className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline" className="gap-2">
-              <Filter className="w-4 h-4" />
-              Filtri
-            </Button>
           </div>
 
           {/* Transactions table */}
@@ -72,11 +201,12 @@ const Transactions = () => {
                   <TableHead>Categoria</TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead className="text-right">Importo</TableHead>
+                  <TableHead className="w-24">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.map((transaction) => {
-                  const Icon = transaction.icon;
+                {filteredTransactions.map((transaction) => {
+                  const Icon = getIconComponent(transaction.icon);
                   const isPositive = transaction.amount > 0;
                   
                   return (
@@ -95,7 +225,7 @@ const Transactions = () => {
                         <span className="text-muted-foreground">{transaction.category}</span>
                       </TableCell>
                       <TableCell>
-                        <span className="text-muted-foreground">{transaction.date}</span>
+                        <span className="text-muted-foreground">{formatDate(transaction.date)}</span>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -109,6 +239,16 @@ const Transactions = () => {
                           </span>
                         </div>
                       </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(transaction)}>
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(transaction.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -120,19 +260,128 @@ const Transactions = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
             <div className="widget-card text-center">
               <p className="text-sm text-muted-foreground mb-1">Totale Entrate</p>
-              <p className="text-xl font-bold text-success">+€2.350,00</p>
+              <p className="text-xl font-bold text-success">+€{totalIncome.toFixed(2).replace('.', ',')}</p>
             </div>
             <div className="widget-card text-center">
               <p className="text-sm text-muted-foreground mb-1">Totale Uscite</p>
-              <p className="text-xl font-bold text-foreground">-€1.058,49</p>
+              <p className="text-xl font-bold text-foreground">-€{totalExpense.toFixed(2).replace('.', ',')}</p>
             </div>
             <div className="widget-card text-center">
               <p className="text-sm text-muted-foreground mb-1">Bilancio</p>
-              <p className="text-xl font-bold text-success">+€1.291,51</p>
+              <p className={`text-xl font-bold ${totalIncome - totalExpense > 0 ? 'text-success' : 'text-destructive'}`}>
+                {totalIncome - totalExpense > 0 ? '+' : ''}€{(totalIncome - totalExpense).toFixed(2).replace('.', ',')}
+              </p>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingTransaction ? "Modifica Transazione" : "Nuova Transazione"}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={!formData.isIncome ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => setFormData(prev => ({ ...prev, isIncome: false }))}
+              >
+                Uscita
+              </Button>
+              <Button
+                type="button"
+                variant={formData.isIncome ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => setFormData(prev => ({ ...prev, isIncome: true, category: "Entrata" }))}
+              >
+                Entrata
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Descrizione</Label>
+              <Input
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="es. Supermercato"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="amount">Importo (€)</Label>
+              <Input
+                id="amount"
+                type="number"
+                step="0.01"
+                value={formData.amount}
+                onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                placeholder="es. 50.00"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="date">Data</Label>
+              <Input
+                id="date"
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Icona</Label>
+              <div className="grid grid-cols-5 gap-2">
+                {iconOptions.map((opt) => {
+                  const IconComp = opt.icon;
+                  return (
+                    <Button
+                      key={opt.value}
+                      type="button"
+                      variant={formData.icon === opt.value ? "default" : "outline"}
+                      size="icon"
+                      className="h-10 w-10"
+                      onClick={() => setFormData(prev => ({ ...prev, icon: opt.value }))}
+                    >
+                      <IconComp className="w-4 h-4" />
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Annulla</Button>
+            <Button onClick={handleSave}>
+              <Check className="w-4 h-4 mr-2" />
+              Salva
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
