@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 
 const iconOptions = [
   { value: "home", icon: Home, label: "Casa" },
@@ -49,20 +50,26 @@ interface RecurringItem {
 }
 
 const MonthlySettings = () => {
-  const [expenses, setExpenses] = useState<RecurringItem[]>([
-    { id: 1, name: "Affitto", amount: 650, icon: "home", active: true, day: 1 },
-    { id: 2, name: "Abbonamento Internet", amount: 29.99, icon: "wifi", active: true, day: 5 },
-    { id: 3, name: "Bolletta Luce", amount: 80, icon: "zap", active: true, day: 15 },
-    { id: 4, name: "Assicurazione Auto", amount: 45, icon: "car", active: true, day: 20 },
-    { id: 5, name: "Palestra", amount: 35, icon: "heart", active: true, day: 1 },
-    { id: 6, name: "Spotify", amount: 9.99, icon: "music", active: true, day: 12 },
-    { id: 7, name: "Netflix", amount: 15.99, icon: "tv", active: false, day: 8 },
-  ]);
+  const [expenses, setExpenses] = useLocalStorageState<RecurringItem[]>(
+    "finprojection.monthlySettings.expenses",
+    [
+      { id: 1, name: "Affitto", amount: 650, icon: "home", active: true, day: 1 },
+      { id: 2, name: "Abbonamento Internet", amount: 29.99, icon: "wifi", active: true, day: 5 },
+      { id: 3, name: "Bolletta Luce", amount: 80, icon: "zap", active: true, day: 15 },
+      { id: 4, name: "Assicurazione Auto", amount: 45, icon: "car", active: true, day: 20 },
+      { id: 5, name: "Palestra", amount: 35, icon: "heart", active: true, day: 1 },
+      { id: 6, name: "Spotify", amount: 9.99, icon: "music", active: true, day: 12 },
+      { id: 7, name: "Netflix", amount: 15.99, icon: "tv", active: false, day: 8 },
+    ]
+  );
 
-  const [incomes, setIncomes] = useState<RecurringItem[]>([
-    { id: 1, name: "Stipendio", amount: 2200, icon: "creditcard", active: true, day: 27 },
-    { id: 2, name: "Rimborso Azienda", amount: 150, icon: "shoppingbag", active: true, day: 28 },
-  ]);
+  const [incomes, setIncomes] = useLocalStorageState<RecurringItem[]>(
+    "finprojection.monthlySettings.incomes",
+    [
+      { id: 1, name: "Stipendio", amount: 2200, icon: "creditcard", active: true, day: 27 },
+      { id: 2, name: "Rimborso Azienda", amount: 150, icon: "shoppingbag", active: true, day: 28 },
+    ]
+  );
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);

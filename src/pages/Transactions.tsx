@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 
 const iconOptions = [
   { value: "shoppingcart", icon: ShoppingCart, label: "Spesa" },
@@ -60,18 +61,21 @@ interface Transaction {
 }
 
 const Transactions = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    { id: 1, description: "Supermercato", category: "Spesa", amount: -85.50, date: "2025-01-21", icon: "shoppingcart" },
-    { id: 2, description: "Stipendio", category: "Entrata", amount: 2200.00, date: "2025-01-21", icon: "creditcard" },
-    { id: 3, description: "Bar Centrale", category: "Ristorazione", amount: -4.50, date: "2025-01-20", icon: "coffee" },
-    { id: 4, description: "Abbonamento Internet", category: "Utilities", amount: -29.99, date: "2025-01-20", icon: "wifi" },
-    { id: 5, description: "Benzina", category: "Trasporti", amount: -55.00, date: "2025-01-18", icon: "car" },
-    { id: 6, description: "Affitto", category: "Casa", amount: -650.00, date: "2025-01-15", icon: "home" },
-    { id: 7, description: "Bolletta Luce", category: "Utilities", amount: -78.50, date: "2025-01-14", icon: "zap" },
-    { id: 8, description: "Palestra", category: "Salute", amount: -35.00, date: "2025-01-12", icon: "heart" },
-    { id: 9, description: "Shopping Online", category: "Shopping", amount: -120.00, date: "2025-01-10", icon: "shoppingbag" },
-    { id: 10, description: "Rimborso Spese", category: "Entrata", amount: 150.00, date: "2025-01-08", icon: "creditcard" },
-  ]);
+  const [transactions, setTransactions] = useLocalStorageState<Transaction[]>(
+    "finprojection.transactions",
+    [
+      { id: 1, description: "Supermercato", category: "Spesa", amount: -85.50, date: "2025-01-21", icon: "shoppingcart" },
+      { id: 2, description: "Stipendio", category: "Entrata", amount: 2200.00, date: "2025-01-21", icon: "creditcard" },
+      { id: 3, description: "Bar Centrale", category: "Ristorazione", amount: -4.50, date: "2025-01-20", icon: "coffee" },
+      { id: 4, description: "Abbonamento Internet", category: "Utilities", amount: -29.99, date: "2025-01-20", icon: "wifi" },
+      { id: 5, description: "Benzina", category: "Trasporti", amount: -55.00, date: "2025-01-18", icon: "car" },
+      { id: 6, description: "Affitto", category: "Casa", amount: -650.00, date: "2025-01-15", icon: "home" },
+      { id: 7, description: "Bolletta Luce", category: "Utilities", amount: -78.50, date: "2025-01-14", icon: "zap" },
+      { id: 8, description: "Palestra", category: "Salute", amount: -35.00, date: "2025-01-12", icon: "heart" },
+      { id: 9, description: "Shopping Online", category: "Shopping", amount: -120.00, date: "2025-01-10", icon: "shoppingbag" },
+      { id: 10, description: "Rimborso Spese", category: "Entrata", amount: 150.00, date: "2025-01-08", icon: "creditcard" },
+    ]
+  );
 
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
