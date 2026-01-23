@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Header from "@/components/Header";
-import { ArrowLeft, Plus, Trash2, Edit2, CreditCard, Home, Wifi, Zap, Car, Heart, Music, Tv, ShoppingBag, X, Check } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit2, CreditCard, Home, Wifi, Zap, Car, Heart, Music, Tv, ShoppingBag, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useRecurringExpenses, useRecurringIncomes, RecurringItem } from "@/hooks/useRecurringItems";
 
 const iconOptions = [
   { value: "home", icon: Home, label: "Casa" },
@@ -40,36 +40,24 @@ const getIconComponent = (iconValue: string) => {
   return found ? found.icon : CreditCard;
 };
 
-interface RecurringItem {
-  id: number;
-  name: string;
-  amount: number;
-  icon: string;
-  active: boolean;
-  day: number;
-}
-
 const MonthlySettings = () => {
-  const [expenses, setExpenses] = useLocalStorageState<RecurringItem[]>(
-    "finprojection.monthlySettings.expenses",
-    [
-      { id: 1, name: "Affitto", amount: 650, icon: "home", active: true, day: 1 },
-      { id: 2, name: "Abbonamento Internet", amount: 29.99, icon: "wifi", active: true, day: 5 },
-      { id: 3, name: "Bolletta Luce", amount: 80, icon: "zap", active: true, day: 15 },
-      { id: 4, name: "Assicurazione Auto", amount: 45, icon: "car", active: true, day: 20 },
-      { id: 5, name: "Palestra", amount: 35, icon: "heart", active: true, day: 1 },
-      { id: 6, name: "Spotify", amount: 9.99, icon: "music", active: true, day: 12 },
-      { id: 7, name: "Netflix", amount: 15.99, icon: "tv", active: false, day: 8 },
-    ]
-  );
+  const {
+    expenses,
+    loading: expensesLoading,
+    addExpense,
+    updateExpense,
+    deleteExpense,
+    toggleExpense,
+  } = useRecurringExpenses();
 
-  const [incomes, setIncomes] = useLocalStorageState<RecurringItem[]>(
-    "finprojection.monthlySettings.incomes",
-    [
-      { id: 1, name: "Stipendio", amount: 2200, icon: "creditcard", active: true, day: 27 },
-      { id: 2, name: "Rimborso Azienda", amount: 150, icon: "shoppingbag", active: true, day: 28 },
-    ]
-  );
+  const {
+    incomes,
+    loading: incomesLoading,
+    addIncome,
+    updateIncome,
+    deleteIncome,
+    toggleIncome,
+  } = useRecurringIncomes();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);
@@ -98,14 +86,13 @@ const MonthlySettings = () => {
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.amount) {
       toast.error("Compila tutti i campi");
       return;
     }
 
-    const newItem: RecurringItem = {
-      id: editingItem?.id || Date.now(),
+    const itemData = {
       name: formData.name,
       amount: parseFloat(formData.amount),
       icon: formData.icon,
@@ -115,42 +102,51 @@ const MonthlySettings = () => {
 
     if (itemType === "income") {
       if (editingItem) {
-        setIncomes(prev => prev.map(i => i.id === editingItem.id ? newItem : i));
-        toast.success("Entrata aggiornata");
+        await updateIncome(editingItem.id, itemData);
       } else {
-        setIncomes(prev => [...prev, newItem]);
-        toast.success("Entrata aggiunta");
+        await addIncome(itemData);
       }
     } else {
       if (editingItem) {
-        setExpenses(prev => prev.map(e => e.id === editingItem.id ? newItem : e));
-        toast.success("Spesa aggiornata");
+        await updateExpense(editingItem.id, itemData);
       } else {
-        setExpenses(prev => [...prev, newItem]);
-        toast.success("Spesa aggiunta");
+        await addExpense(itemData);
       }
     }
 
     setDialogOpen(false);
   };
 
-  const handleDelete = (id: number, type: "income" | "expense") => {
+  const handleDelete = async (id: string, type: "income" | "expense") => {
     if (type === "income") {
-      setIncomes(prev => prev.filter(i => i.id !== id));
-      toast.success("Entrata eliminata");
+      await deleteIncome(id);
     } else {
-      setExpenses(prev => prev.filter(e => e.id !== id));
-      toast.success("Spesa eliminata");
+      await deleteExpense(id);
     }
   };
 
-  const handleToggle = (id: number, type: "income" | "expense") => {
+  const handleToggle = async (id: string, type: "income" | "expense") => {
     if (type === "income") {
-      setIncomes(prev => prev.map(i => i.id === id ? { ...i, active: !i.active } : i));
+      await toggleIncome(id);
     } else {
-      setExpenses(prev => prev.map(e => e.id === id ? { ...e, active: !e.active } : e));
+      await toggleExpense(id);
     }
   };
+
+  const loading = expensesLoading || incomesLoading;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 pt-24 pb-12">
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">Caricamento...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -196,37 +192,41 @@ const MonthlySettings = () => {
               </Button>
             </div>
             
-            <div className="space-y-3">
-              {incomes.map((income) => {
-                const Icon = getIconComponent(income.icon);
-                return (
-                  <div 
-                    key={income.id}
-                    className={`flex items-center justify-between p-4 rounded-lg bg-secondary/50 ${!income.active ? 'opacity-50' : ''}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
-                        <Icon className="w-5 h-5 text-success" />
+            {incomes.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">Nessuna entrata ricorrente</p>
+            ) : (
+              <div className="space-y-3">
+                {incomes.map((income) => {
+                  const Icon = getIconComponent(income.icon);
+                  return (
+                    <div 
+                      key={income.id}
+                      className={`flex items-center justify-between p-4 rounded-lg bg-secondary/50 ${!income.active ? 'opacity-50' : ''}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
+                          <Icon className="w-5 h-5 text-success" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{income.name}</p>
+                          <p className="text-xs text-muted-foreground">Giorno {income.day} del mese</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{income.name}</p>
-                        <p className="text-xs text-muted-foreground">Giorno {income.day} del mese</p>
+                      <div className="flex items-center gap-4">
+                        <span className="font-semibold text-success">+€{income.amount.toFixed(2).replace('.', ',')}</span>
+                        <Switch checked={income.active} onCheckedChange={() => handleToggle(income.id, "income")} />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(income, "income")}>
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(income.id, "income")}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="font-semibold text-success">+€{income.amount.toFixed(2).replace('.', ',')}</span>
-                      <Switch checked={income.active} onCheckedChange={() => handleToggle(income.id, "income")} />
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(income, "income")}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(income.id, "income")}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Recurring Expenses */}
@@ -239,37 +239,41 @@ const MonthlySettings = () => {
               </Button>
             </div>
             
-            <div className="space-y-3">
-              {expenses.map((expense) => {
-                const Icon = getIconComponent(expense.icon);
-                return (
-                  <div 
-                    key={expense.id}
-                    className={`flex items-center justify-between p-4 rounded-lg bg-secondary/50 ${!expense.active ? 'opacity-50' : ''}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                        <Icon className="w-5 h-5 text-muted-foreground" />
+            {expenses.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">Nessuna spesa ricorrente</p>
+            ) : (
+              <div className="space-y-3">
+                {expenses.map((expense) => {
+                  const Icon = getIconComponent(expense.icon);
+                  return (
+                    <div 
+                      key={expense.id}
+                      className={`flex items-center justify-between p-4 rounded-lg bg-secondary/50 ${!expense.active ? 'opacity-50' : ''}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                          <Icon className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{expense.name}</p>
+                          <p className="text-xs text-muted-foreground">Giorno {expense.day} del mese</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{expense.name}</p>
-                        <p className="text-xs text-muted-foreground">Giorno {expense.day} del mese</p>
+                      <div className="flex items-center gap-4">
+                        <span className="font-semibold text-foreground">-€{expense.amount.toFixed(2).replace('.', ',')}</span>
+                        <Switch checked={expense.active} onCheckedChange={() => handleToggle(expense.id, "expense")} />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(expense, "expense")}>
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(expense.id, "expense")}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="font-semibold text-foreground">-€{expense.amount.toFixed(2).replace('.', ',')}</span>
-                      <Switch checked={expense.active} onCheckedChange={() => handleToggle(expense.id, "expense")} />
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(expense, "expense")}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(expense.id, "expense")}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </main>

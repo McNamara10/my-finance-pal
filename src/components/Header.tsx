@@ -1,16 +1,25 @@
 import { forwardRef } from "react";
-import { TrendingUp } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { TrendingUp, LogOut } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 const Header = forwardRef<HTMLElement>((_, ref) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   
   const navItems = [
     { path: "/", label: "Dashboard" },
     { path: "/transactions", label: "Transazioni" },
     { path: "/monthly-settings", label: "Impostazioni" },
   ];
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/auth");
+  };
 
   return (
     <header ref={ref} className="fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border">
@@ -40,6 +49,13 @@ const Header = forwardRef<HTMLElement>((_, ref) => {
               {item.label}
             </Link>
           ))}
+          
+          {user && (
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground">
+              <LogOut className="w-4 h-4" />
+              Esci
+            </Button>
+          )}
         </nav>
       </div>
     </header>
