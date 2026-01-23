@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Header from "@/components/Header";
-import { ArrowLeft, Plus, Search, Filter, ArrowDownLeft, ArrowUpRight, ShoppingCart, Coffee, Wifi, Car, CreditCard, Home, Zap, Heart, ShoppingBag, Trash2, Edit2, X, Check } from "lucide-react";
+import { ArrowLeft, Plus, Search, ArrowDownLeft, ArrowUpRight, ShoppingCart, Coffee, Wifi, Car, CreditCard, Home, Zap, Heart, ShoppingBag, Trash2, Edit2, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useTransactions } from "@/hooks/useTransactions";
 
 const iconOptions = [
   { value: "shoppingcart", icon: ShoppingCart, label: "Spesa" },
@@ -51,35 +51,12 @@ const getIconComponent = (iconValue: string) => {
   return found ? found.icon : CreditCard;
 };
 
-interface Transaction {
-  id: number;
-  description: string;
-  category: string;
-  amount: number;
-  date: string;
-  icon: string;
-}
-
 const Transactions = () => {
-  const [transactions, setTransactions] = useLocalStorageState<Transaction[]>(
-    "finprojection.transactions",
-    [
-      { id: 1, description: "Supermercato", category: "Spesa", amount: -85.50, date: "2025-01-21", icon: "shoppingcart" },
-      { id: 2, description: "Stipendio", category: "Entrata", amount: 2200.00, date: "2025-01-21", icon: "creditcard" },
-      { id: 3, description: "Bar Centrale", category: "Ristorazione", amount: -4.50, date: "2025-01-20", icon: "coffee" },
-      { id: 4, description: "Abbonamento Internet", category: "Utilities", amount: -29.99, date: "2025-01-20", icon: "wifi" },
-      { id: 5, description: "Benzina", category: "Trasporti", amount: -55.00, date: "2025-01-18", icon: "car" },
-      { id: 6, description: "Affitto", category: "Casa", amount: -650.00, date: "2025-01-15", icon: "home" },
-      { id: 7, description: "Bolletta Luce", category: "Utilities", amount: -78.50, date: "2025-01-14", icon: "zap" },
-      { id: 8, description: "Palestra", category: "Salute", amount: -35.00, date: "2025-01-12", icon: "heart" },
-      { id: 9, description: "Shopping Online", category: "Shopping", amount: -120.00, date: "2025-01-10", icon: "shoppingbag" },
-      { id: 10, description: "Rimborso Spese", category: "Entrata", amount: 150.00, date: "2025-01-08", icon: "creditcard" },
-    ]
-  );
+  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<{ id: string } | null>(null);
   const [formData, setFormData] = useState({
     description: "",
     category: "Spesa",
@@ -115,8 +92,8 @@ const Transactions = () => {
     setDialogOpen(true);
   };
 
-  const openEditDialog = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
+  const openEditDialog = (transaction: { id: string; description: string; category: string; amount: number; date: string; icon: string }) => {
+    setEditingTransaction({ id: transaction.id });
     setFormData({
       description: transaction.description,
       category: transaction.category,
@@ -128,7 +105,7 @@ const Transactions = () => {
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.description || !formData.amount) {
       toast.error("Compila tutti i campi");
       return;
@@ -136,8 +113,7 @@ const Transactions = () => {
 
     const amount = parseFloat(formData.amount) * (formData.isIncome ? 1 : -1);
     
-    const newTransaction: Transaction = {
-      id: editingTransaction?.id || Date.now(),
+    const transactionData = {
       description: formData.description,
       category: formData.category,
       amount,
@@ -146,20 +122,30 @@ const Transactions = () => {
     };
 
     if (editingTransaction) {
-      setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? newTransaction : t));
-      toast.success("Transazione aggiornata");
+      await updateTransaction(editingTransaction.id, transactionData);
     } else {
-      setTransactions(prev => [newTransaction, ...prev]);
-      toast.success("Transazione aggiunta");
+      await addTransaction(transactionData);
     }
 
     setDialogOpen(false);
   };
 
-  const handleDelete = (id: number) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-    toast.success("Transazione eliminata");
+  const handleDelete = async (id: string) => {
+    await deleteTransaction(id);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 pt-24 pb-12">
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">Caricamento...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -198,66 +184,75 @@ const Transactions = () => {
 
           {/* Transactions table */}
           <div className="widget-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Descrizione</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead className="text-right">Importo</TableHead>
-                  <TableHead className="w-24">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredTransactions.map((transaction) => {
-                  const Icon = getIconComponent(transaction.icon);
-                  const isPositive = transaction.amount > 0;
-                  
-                  return (
-                    <TableRow key={transaction.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                            isPositive ? 'bg-success/10' : 'bg-muted'
-                          }`}>
-                            <Icon className={`w-5 h-5 ${isPositive ? 'text-success' : 'text-muted-foreground'}`} />
+            {filteredTransactions.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">Nessuna transazione trovata</p>
+                <Button className="mt-4" onClick={openAddDialog}>
+                  Aggiungi la prima transazione
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Descrizione</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead className="text-right">Importo</TableHead>
+                    <TableHead className="w-24">Azioni</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTransactions.map((transaction) => {
+                    const Icon = getIconComponent(transaction.icon);
+                    const isPositive = transaction.amount > 0;
+                    
+                    return (
+                      <TableRow key={transaction.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                              isPositive ? 'bg-success/10' : 'bg-muted'
+                            }`}>
+                              <Icon className={`w-5 h-5 ${isPositive ? 'text-success' : 'text-muted-foreground'}`} />
+                            </div>
+                            <span className="font-medium">{transaction.description}</span>
                           </div>
-                          <span className="font-medium">{transaction.description}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-muted-foreground">{transaction.category}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-muted-foreground">{formatDate(transaction.date)}</span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {isPositive ? (
-                            <ArrowDownLeft className="w-4 h-4 text-success" />
-                          ) : (
-                            <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
-                          )}
-                          <span className={`font-semibold ${isPositive ? 'text-success' : 'text-foreground'}`}>
-                            {isPositive ? '+' : ''}€{Math.abs(transaction.amount).toFixed(2).replace('.', ',')}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(transaction)}>
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(transaction.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-muted-foreground">{transaction.category}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-muted-foreground">{formatDate(transaction.date)}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isPositive ? (
+                              <ArrowDownLeft className="w-4 h-4 text-success" />
+                            ) : (
+                              <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
+                            )}
+                            <span className={`font-semibold ${isPositive ? 'text-success' : 'text-foreground'}`}>
+                              {isPositive ? '+' : ''}€{Math.abs(transaction.amount).toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(transaction)}>
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(transaction.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </div>
 
           {/* Summary */}

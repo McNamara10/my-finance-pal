@@ -1,1 +1,10 @@
 project_id = "ffeiworzetgtxhcapxsv"
+
+[functions.transactions-api]
+verify_jwt = false
+
+[functions.recurring-api]
+verify_jwt = false
+
+[functions.backup-api]
+verify_jwt = false
