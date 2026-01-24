@@ -5,7 +5,7 @@ import ProjectionWidget from "@/components/ProjectionWidget";
 import SalaryWidget from "@/components/SalaryWidget";
 import ProjectionChart from "@/components/ProjectionChart";
 import TipCard from "@/components/TipCard";
-import RecentActivity from "@/components/RecentActivity";
+import RecentActivityLive from "@/components/RecentActivityLive";
 import FinancialHealth from "@/components/FinancialHealth";
 
 const Index = () => {
@@ -35,7 +35,7 @@ const Index = () => {
         
         {/* Activity & Health */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <RecentActivity />
+          <RecentActivityLive />
           <FinancialHealth />
         </div>
       </main>
