@@ -1,18 +1,43 @@
-import { TrendingUp, ArrowUpRight } from "lucide-react";
+import { TrendingUp, ArrowDownRight, ArrowUpRight } from "lucide-react";
 
-const ProjectionWidget = () => {
+type ProjectionWidgetProps = {
+  projectionDateLabel: string;
+  projectedBalance: number;
+  delta: number;
+  deltaPct: number;
+};
+
+const formatEuro = (value: number) => {
+  const abs = Math.abs(value);
+  const formatted = abs.toLocaleString("it-IT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${value < 0 ? "-" : ""}€${formatted}`;
+};
+
+const ProjectionWidget = ({ projectionDateLabel, projectedBalance, delta, deltaPct }: ProjectionWidgetProps) => {
+  const isPositive = delta >= 0;
+  const deltaLabel = `${isPositive ? "+" : "-"}${formatEuro(Math.abs(delta))} (${Math.abs(deltaPct).toFixed(1)}%)`;
+
   return (
     <div className="widget-card animate-fade-in" style={{ animationDelay: "0.1s" }}>
       <div className="flex items-center gap-2 mb-3">
         <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
           <TrendingUp className="w-4 h-4 text-success" />
         </div>
-        <span className="stat-label">Proiezione (29 Jan)</span>
+        <span className="stat-label">Proiezione ({projectionDateLabel})</span>
       </div>
-      <p className="stat-value">€2.244,00</p>
+      <p className="stat-value">{formatEuro(projectedBalance)}</p>
       <div className="flex items-center gap-1.5 mt-1">
-        <ArrowUpRight className="w-4 h-4 text-success" />
-        <span className="positive-change text-sm">+€1.450,00 (182.6%)</span>
+        {isPositive ? (
+          <ArrowUpRight className="w-4 h-4 text-success" />
+        ) : (
+          <ArrowDownRight className="w-4 h-4 text-destructive" />
+        )}
+        <span className={isPositive ? "positive-change text-sm" : "text-sm font-semibold text-destructive"}>
+          {deltaLabel}
+        </span>
       </div>
     </div>
   );

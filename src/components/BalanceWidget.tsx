@@ -1,6 +1,20 @@
 import { Euro } from "lucide-react";
 
-const BalanceWidget = () => {
+type BalanceWidgetProps = {
+  balance: number;
+  updatedLabel?: string;
+};
+
+const formatEuro = (value: number) => {
+  const abs = Math.abs(value);
+  const formatted = abs.toLocaleString("it-IT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${value < 0 ? "-" : ""}€${formatted}`;
+};
+
+const BalanceWidget = ({ balance, updatedLabel = "Aggiornato oggi" }: BalanceWidgetProps) => {
   return (
     <div className="widget-card animate-fade-in">
       <div className="flex items-center gap-2 mb-3">
@@ -9,8 +23,8 @@ const BalanceWidget = () => {
         </div>
         <span className="stat-label">Saldo Attuale</span>
       </div>
-      <p className="stat-value">€794,00</p>
-      <p className="text-sm text-muted-foreground mt-1">Aggiornato oggi</p>
+      <p className="stat-value">{formatEuro(balance)}</p>
+      <p className="text-sm text-muted-foreground mt-1">{updatedLabel}</p>
     </div>
   );
 };
