@@ -9,7 +9,17 @@ import RecentActivityLive from "@/components/RecentActivityLive";
 import FinancialHealth from "@/components/FinancialHealth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useRecurringExpenses, useRecurringIncomes } from "@/hooks/useRecurringItems";
-import { addMonths, endOfMonth, isBefore, isSameDay, setDate, startOfDay } from "date-fns";
+import {
+  addMonths,
+  endOfMonth,
+  isBefore,
+  isSameDay,
+  isSameMonth,
+  parseISO,
+  setDate,
+  startOfDay,
+  startOfMonth,
+} from "date-fns";
 
 const toShortItDate = (date: Date) =>
   date.toLocaleDateString("it-IT", {
@@ -28,7 +38,18 @@ const Index = () => {
   const { incomes } = useRecurringIncomes();
   const { expenses } = useRecurringExpenses();
 
-  const balance = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  // Filtra solo le transazioni del mese corrente
+  const currentMonthTransactions = transactions.filter((t) => {
+    const txDate = parseISO(t.date);
+    return isSameMonth(txDate, now);
+  });
+
+  const balance = currentMonthTransactions.reduce((sum, t) => sum + t.amount, 0);
+
   const activeIncomes = incomes.filter((i) => i.active);
   const activeExpenses = expenses.filter((e) => e.active);
 
@@ -39,8 +60,7 @@ const Index = () => {
   const delta = projectedBalance - balance;
   const deltaPct = balance !== 0 ? (delta / Math.abs(balance)) * 100 : 0;
 
-  const now = new Date();
-  const projectionDateLabel = toShortItDate(endOfMonth(now));
+  const projectionDateLabel = toShortItDate(monthEnd);
 
   const nextIncomeDate = (() => {
     if (activeIncomes.length === 0) return null;
@@ -56,7 +76,7 @@ const Index = () => {
       : toShortItDate(nextIncomeDate)
     : "—";
 
-  const salaryBadgeVariant = nextIncomeDate ? "incoming" : "not-set" as const;
+  const salaryBadgeVariant = nextIncomeDate ? "incoming" : ("not-set" as const);
   const salaryBadgeLabel = nextIncomeDate ? "In arrivo" : "Non impostato";
   const salarySubtitle = nextIncomeDate
     ? "La prossima entrata ricorrente è prevista a breve"
@@ -65,10 +85,10 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container mx-auto px-4 pt-24 pb-12">
         <DashboardNav />
-        
+
         {/* Financial Widgets */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <BalanceWidget balance={balance} />
@@ -85,17 +105,17 @@ const Index = () => {
             subtitle={salarySubtitle}
           />
         </div>
-        
+
         {/* Projection Chart */}
         <div className="mb-6">
           <ProjectionChart />
         </div>
-        
+
         {/* Tip Card */}
         <div className="mb-6">
           <TipCard />
         </div>
-        
+
         {/* Activity & Health */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <RecentActivityLive />

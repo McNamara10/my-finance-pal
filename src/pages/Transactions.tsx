@@ -71,8 +71,15 @@ const Transactions = () => {
     t.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalIncome = transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
-  const totalExpense = transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  // Filtra per mese corrente per i totali
+  const now = new Date();
+  const currentMonthTransactions = transactions.filter((t) => {
+    const txDate = new Date(t.date);
+    return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+  });
+
+  const totalIncome = currentMonthTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = currentMonthTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);

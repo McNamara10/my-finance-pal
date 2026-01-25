@@ -16,7 +16,7 @@ import {
   Wifi,
   Zap,
 } from "lucide-react";
-import { format, isToday, isYesterday, parseISO } from "date-fns";
+import { format, isToday, isSameMonth, isYesterday, parseISO } from "date-fns";
 import { it } from "date-fns/locale";
 
 import { useTransactions } from "@/hooks/useTransactions";
@@ -45,7 +45,15 @@ const formatTransactionDate = (dateString: string) => {
 
 const RecentActivityLive = () => {
   const { transactions, loading } = useTransactions();
-  const recentTransactions = transactions.slice(0, 5);
+
+  const now = new Date();
+  // Filtra solo le transazioni del mese corrente
+  const currentMonthTransactions = transactions.filter((t) => {
+    const txDate = parseISO(t.date);
+    return isSameMonth(txDate, now);
+  });
+
+  const recentTransactions = currentMonthTransactions.slice(0, 5);
 
   if (loading) {
     return (
