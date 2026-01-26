@@ -53,10 +53,19 @@ const Index = () => {
   const activeIncomes = incomes.filter((i) => i.active);
   const activeExpenses = expenses.filter((e) => e.active);
 
-  const recurringIncomeTotal = activeIncomes.reduce((sum, i) => sum + i.amount, 0);
-  const recurringExpenseTotal = activeExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const today = now.getDate();
 
-  const projectedBalance = balance + recurringIncomeTotal - recurringExpenseTotal;
+  // Somma solo le entrate ricorrenti che devono ancora arrivare questo mese
+  const futureIncomeTotal = activeIncomes
+    .filter((i) => i.day > today)
+    .reduce((sum, i) => sum + i.amount, 0);
+
+  // Somma solo le spese ricorrenti che devono ancora arrivare questo mese
+  const futureExpenseTotal = activeExpenses
+    .filter((e) => e.day > today)
+    .reduce((sum, e) => sum + e.amount, 0);
+
+  const projectedBalance = balance + futureIncomeTotal - futureExpenseTotal;
   const delta = projectedBalance - balance;
   const deltaPct = balance !== 0 ? (delta / Math.abs(balance)) * 100 : 0;
 
