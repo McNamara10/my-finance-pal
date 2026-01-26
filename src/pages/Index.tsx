@@ -89,8 +89,8 @@ const Index = () => {
       .filter((e) => e.day < mainIncome.day)
       .reduce((sum, e) => sum + e.amount, 0);
     
-    // Proiezione = saldo attuale - spese rimanenti questo mese - spese prossimo mese prima dello stipendio
-    const projectedAtSalary = balance - remainingThisMonthExpenses - nextMonthExpensesBeforeSalary;
+    // Proiezione = saldo attuale - spese rimanenti questo mese - spese prossimo mese prima dello stipendio + stipendio
+    const projectedAtSalary = balance - remainingThisMonthExpenses - nextMonthExpensesBeforeSalary + mainIncome.amount;
     
     return {
       date: nextSalaryDate,
