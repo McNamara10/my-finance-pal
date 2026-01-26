@@ -12,10 +12,17 @@ export interface Transaction {
   icon: string;
 }
 
+const API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transactions-api`;
+
 export const useTransactions = () => {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const getAuthHeader = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? `Bearer ${session.access_token}` : '';
+  };
 
   const fetchTransactions = async () => {
     if (!user) {
@@ -25,15 +32,24 @@ export const useTransactions = () => {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('date', { ascending: false });
+      const authHeader = await getAuthHeader();
+      const response = await fetch(API_URL, {
+        method: 'GET',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Errore nel caricamento');
+      }
+
+      const { transactions: data } = await response.json();
 
       setTransactions(
-        data.map((t) => ({
+        data.map((t: any) => ({
           id: t.id,
           description: t.description,
           category: t.category,
@@ -58,20 +74,22 @@ export const useTransactions = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert({
-          user_id: user.id,
-          description: transaction.description,
-          category: transaction.category,
-          amount: transaction.amount,
-          date: transaction.date,
-          icon: transaction.icon,
-        })
-        .select()
-        .single();
+      const authHeader = await getAuthHeader();
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(transaction),
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Errore nell\'aggiunta');
+      }
+
+      const { transaction: data } = await response.json();
 
       setTransactions((prev) => [
         {
@@ -95,18 +113,20 @@ export const useTransactions = () => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('transactions')
-        .update({
-          description: updates.description,
-          category: updates.category,
-          amount: updates.amount,
-          date: updates.date,
-          icon: updates.icon,
-        })
-        .eq('id', id);
+      const authHeader = await getAuthHeader();
+      const response = await fetch(API_URL, {
+        method: 'PUT',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id, ...updates }),
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Errore nell\'aggiornamento');
+      }
 
       setTransactions((prev) =>
         prev.map((t) => (t.id === id ? { id, ...updates } : t))
@@ -122,12 +142,19 @@ export const useTransactions = () => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id);
+      const authHeader = await getAuthHeader();
+      const response = await fetch(`${API_URL}?id=${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Errore nell\'eliminazione');
+      }
 
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       toast.success('Transazione eliminata');
