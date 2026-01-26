@@ -71,25 +71,37 @@ const Index = () => {
 
   const projectionDateLabel = toShortItDate(monthEnd);
 
-  const nextIncomeDate = (() => {
+  // Calcola la data del prossimo stipendio (mese successivo)
+  const nextSalaryData = (() => {
     if (activeIncomes.length === 0) return null;
-    const dates = activeIncomes
-      .map((i) => nextDateForDayOfMonth(i.day, now))
-      .sort((a, b) => a.getTime() - b.getTime());
-    return dates[0] ?? null;
+    
+    // Trova l'entrata principale (stipendio) - la prima per ordine di giorno
+    const mainIncome = activeIncomes[0];
+    const nextSalaryDate = addMonths(setDate(now, mainIncome.day), 1);
+    
+    // Calcola le spese rimanenti di questo mese (giorno > oggi)
+    const remainingThisMonthExpenses = activeExpenses
+      .filter((e) => e.day > today)
+      .reduce((sum, e) => sum + e.amount, 0);
+    
+    // Calcola le spese del mese prossimo prima dello stipendio
+    const nextMonthExpensesBeforeSalary = activeExpenses
+      .filter((e) => e.day < mainIncome.day)
+      .reduce((sum, e) => sum + e.amount, 0);
+    
+    // Proiezione = saldo attuale - spese rimanenti questo mese - spese prossimo mese prima dello stipendio
+    const projectedAtSalary = balance - remainingThisMonthExpenses - nextMonthExpensesBeforeSalary;
+    
+    return {
+      date: nextSalaryDate,
+      projectedBalance: projectedAtSalary,
+      salaryAmount: mainIncome.amount,
+    };
   })();
 
-  const salaryDayLabel = nextIncomeDate
-    ? isSameDay(nextIncomeDate, now)
-      ? "Oggi"
-      : toShortItDate(nextIncomeDate)
+  const salaryDateLabel = nextSalaryData
+    ? toShortItDate(nextSalaryData.date)
     : "—";
-
-  const salaryBadgeVariant = nextIncomeDate ? "incoming" : ("not-set" as const);
-  const salaryBadgeLabel = nextIncomeDate ? "In arrivo" : "Non impostato";
-  const salarySubtitle = nextIncomeDate
-    ? "La prossima entrata ricorrente è prevista a breve"
-    : "Nessuna entrata ricorrente configurata";
 
   return (
     <div className="min-h-screen bg-background">
@@ -108,10 +120,10 @@ const Index = () => {
             deltaPct={deltaPct}
           />
           <SalaryWidget
-            badgeLabel={salaryBadgeLabel}
-            badgeVariant={salaryBadgeVariant}
-            dayLabel={salaryDayLabel}
-            subtitle={salarySubtitle}
+            dateLabel={salaryDateLabel}
+            projectedBalance={nextSalaryData?.projectedBalance ?? 0}
+            salaryAmount={nextSalaryData?.salaryAmount ?? 0}
+            hasData={nextSalaryData !== null}
           />
         </div>
 
