@@ -48,7 +48,7 @@ const SalaryWidget = ({ dateLabel, projectedBalance, salaryAmount, hasData }: Sa
         {formatEuro(projectedBalance)}
       </p>
       <p className="text-xs text-muted-foreground mt-1">
-        Prima dell'arrivo dello stipendio di {formatEuro(salaryAmount)}
+        Incluso stipendio di {formatEuro(salaryAmount)}
       </p>
     </div>
   );
