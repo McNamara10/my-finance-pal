@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
 serve(async (req) => {
@@ -28,15 +29,15 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const userId = claimsData.claims.sub;
+    const userId = user.id;
     const url = new URL(req.url);
     const method = req.method;
     const type = url.searchParams.get('type') || 'expense'; // 'expense' or 'income'
@@ -64,7 +65,7 @@ serve(async (req) => {
     // POST - Create new recurring item
     if (method === 'POST') {
       const body = await req.json();
-      const { name, amount, icon, active, day } = body;
+      const { name, amount, icon, active, day, start_date } = body;
 
       if (!name || amount === undefined) {
         return new Response(
@@ -82,6 +83,7 @@ serve(async (req) => {
           icon: icon || 'creditcard',
           active: active ?? true,
           day: day || 1,
+          start_date: start_date || '2026-01-01',
         })
         .select()
         .single();
@@ -125,7 +127,7 @@ serve(async (req) => {
     // DELETE - Delete recurring item
     if (method === 'DELETE') {
       const id = url.searchParams.get('id');
-      
+
       if (!id) {
         return new Response(
           JSON.stringify({ error: 'Item ID required' }),

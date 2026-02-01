@@ -10,6 +10,7 @@ export interface RecurringItem {
   icon: string;
   active: boolean;
   day: number;
+  start_date: string;
 }
 
 export const useRecurringExpenses = () => {
@@ -33,13 +34,14 @@ export const useRecurringExpenses = () => {
       if (error) throw error;
 
       setExpenses(
-        data.map((e) => ({
+        data.map((e: any) => ({
           id: e.id,
           name: e.name,
           amount: Number(e.amount),
           icon: e.icon,
           active: e.active,
           day: e.day,
+          start_date: e.start_date,
         }))
       );
     } catch (error) {
@@ -67,7 +69,8 @@ export const useRecurringExpenses = () => {
           icon: expense.icon,
           active: expense.active,
           day: expense.day,
-        })
+          start_date: expense.start_date,
+        } as any)
         .select()
         .single();
 
@@ -82,6 +85,7 @@ export const useRecurringExpenses = () => {
           icon: data.icon,
           active: data.active,
           day: data.day,
+          start_date: data.start_date,
         },
       ]);
       toast.success('Spesa aggiunta');
@@ -170,13 +174,14 @@ export const useRecurringIncomes = () => {
       if (error) throw error;
 
       setIncomes(
-        data.map((i) => ({
+        data.map((i: any) => ({
           id: i.id,
           name: i.name,
           amount: Number(i.amount),
           icon: i.icon,
           active: i.active,
           day: i.day,
+          start_date: i.start_date,
         }))
       );
     } catch (error) {
@@ -204,7 +209,8 @@ export const useRecurringIncomes = () => {
           icon: income.icon,
           active: income.active,
           day: income.day,
-        })
+          start_date: income.start_date,
+        } as any)
         .select()
         .single();
 
@@ -219,6 +225,7 @@ export const useRecurringIncomes = () => {
           icon: data.icon,
           active: data.active,
           day: data.day,
+          start_date: data.start_date,
         },
       ]);
       toast.success('Entrata aggiunta');

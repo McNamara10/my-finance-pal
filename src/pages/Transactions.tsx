@@ -71,15 +71,8 @@ const Transactions = () => {
     t.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Filtra per mese corrente per i totali
-  const now = new Date();
-  const currentMonthTransactions = transactions.filter((t) => {
-    const txDate = new Date(t.date);
-    return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
-  });
-
-  const totalIncome = currentMonthTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
-  const totalExpense = currentMonthTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalIncome = transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -119,7 +112,7 @@ const Transactions = () => {
     }
 
     const amount = parseFloat(formData.amount) * (formData.isIncome ? 1 : -1);
-    
+
     const transactionData = {
       description: formData.description,
       category: formData.category,
@@ -157,7 +150,7 @@ const Transactions = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container mx-auto px-4 pt-24 pb-12">
         <div className="animate-fade-in">
           {/* Back button and title */}
@@ -180,8 +173,8 @@ const Transactions = () => {
           <div className="flex gap-3 mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Cerca transazioni..." 
+              <Input
+                placeholder="Cerca transazioni..."
                 className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -213,15 +206,14 @@ const Transactions = () => {
                   {filteredTransactions.map((transaction) => {
                     const Icon = getIconComponent(transaction.icon);
                     const isPositive = transaction.amount > 0;
-                    
+
                     return (
                       <TableRow key={transaction.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                              isPositive ? 'bg-success/10' : 'bg-muted'
-                            }`}>
-                              <Icon className={`w-5 h-5 ${isPositive ? 'text-success' : 'text-muted-foreground'}`} />
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isPositive ? 'bg-success/10' : 'bg-destructive/10'
+                              }`}>
+                              <Icon className={`w-5 h-5 ${isPositive ? 'text-success' : 'text-destructive'}`} />
                             </div>
                             <span className="font-medium">{transaction.description}</span>
                           </div>
@@ -235,12 +227,12 @@ const Transactions = () => {
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {isPositive ? (
-                              <ArrowDownLeft className="w-4 h-4 text-success" />
+                              <ArrowUpRight className="w-4 h-4 text-success" />
                             ) : (
-                              <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
+                              <ArrowDownLeft className="w-4 h-4 text-destructive" />
                             )}
-                            <span className={`font-semibold ${isPositive ? 'text-success' : 'text-foreground'}`}>
-                              {isPositive ? '+' : ''}€{Math.abs(transaction.amount).toFixed(2).replace('.', ',')}
+                            <span className={`font-semibold ${isPositive ? 'text-success' : 'text-destructive'}`}>
+                              {isPositive ? '+' : '-'}€{Math.abs(transaction.amount).toFixed(2).replace('.', ',')}
                             </span>
                           </div>
                         </TableCell>
@@ -270,7 +262,7 @@ const Transactions = () => {
             </div>
             <div className="widget-card text-center">
               <p className="text-sm text-muted-foreground mb-1">Totale Uscite</p>
-              <p className="text-xl font-bold text-foreground">-€{totalExpense.toFixed(2).replace('.', ',')}</p>
+              <p className="text-xl font-bold text-destructive">-€{totalExpense.toFixed(2).replace('.', ',')}</p>
             </div>
             <div className="widget-card text-center">
               <p className="text-sm text-muted-foreground mb-1">Bilancio</p>
@@ -290,7 +282,7 @@ const Transactions = () => {
               {editingTransaction ? "Modifica Transazione" : "Nuova Transazione"}
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="flex gap-2">
               <Button
@@ -320,7 +312,7 @@ const Transactions = () => {
                 placeholder="es. Supermercato"
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="amount">Importo (€)</Label>
               <Input
@@ -342,7 +334,7 @@ const Transactions = () => {
                 onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label>Categoria</Label>
               <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
@@ -356,7 +348,7 @@ const Transactions = () => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Icona</Label>
               <div className="grid grid-cols-5 gap-2">
@@ -378,7 +370,7 @@ const Transactions = () => {
               </div>
             </div>
           </div>
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annulla</Button>
             <Button onClick={handleSave}>

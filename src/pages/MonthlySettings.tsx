@@ -62,7 +62,15 @@ const MonthlySettings = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);
   const [itemType, setItemType] = useState<"income" | "expense">("expense");
-  const [formData, setFormData] = useState({ name: "", amount: "", icon: "creditcard", day: "1" });
+  const now = new Date();
+  const [formData, setFormData] = useState({
+    name: "",
+    amount: "",
+    icon: "creditcard",
+    day: "1",
+    startMonth: (now.getMonth() + 1).toString(),
+    startYear: now.getFullYear().toString()
+  });
 
   const totalExpenses = expenses.filter(e => e.active).reduce((sum, e) => sum + e.amount, 0);
   const totalIncomes = incomes.filter(i => i.active).reduce((sum, i) => sum + i.amount, 0);
@@ -70,18 +78,31 @@ const MonthlySettings = () => {
   const openAddDialog = (type: "income" | "expense") => {
     setItemType(type);
     setEditingItem(null);
-    setFormData({ name: "", amount: "", icon: "creditcard", day: "1" });
+    setFormData({
+      name: "",
+      amount: "",
+      icon: "creditcard",
+      day: "1",
+      startMonth: (now.getMonth() + 1).toString(),
+      startYear: now.getFullYear().toString()
+    });
     setDialogOpen(true);
   };
 
   const openEditDialog = (item: RecurringItem, type: "income" | "expense") => {
     setItemType(type);
     setEditingItem(item);
+
+    // Fallback per start_date se non ancora presente nel DB
+    const startDate = item.start_date ? new Date(item.start_date) : now;
+
     setFormData({
       name: item.name,
       amount: item.amount.toString(),
       icon: item.icon,
       day: item.day.toString(),
+      startMonth: (startDate.getMonth() + 1).toString(),
+      startYear: startDate.getFullYear().toString(),
     });
     setDialogOpen(true);
   };
@@ -92,12 +113,17 @@ const MonthlySettings = () => {
       return;
     }
 
+    // Costruiamo la data di inizio: YYYY-MM-DD
+    const month = formData.startMonth.padStart(2, '0');
+    const startDateStr = `${formData.startYear}-${month}-01`;
+
     const itemData = {
       name: formData.name,
       amount: parseFloat(formData.amount),
       icon: formData.icon,
       day: parseInt(formData.day),
       active: editingItem?.active ?? true,
+      start_date: startDateStr,
     };
 
     if (itemType === "income") {
@@ -151,7 +177,7 @@ const MonthlySettings = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container mx-auto px-4 pt-24 pb-12">
         <div className="animate-fade-in">
           {/* Back button and title */}
@@ -182,6 +208,52 @@ const MonthlySettings = () => {
             </div>
           </div>
 
+          {/* Simulation Settings - Cost of Living */}
+          <div className="widget-card mb-6 border-l-4 border-l-primary/50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <ShoppingBag className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Vita Quotidiana (Simulazione)</h2>
+                  <p className="text-sm text-muted-foreground">Simula una spesa mensile variabile per il calcolo della proiezione</p>
+                </div>
+              </div>
+              <Switch
+                checked={localStorage.getItem("sim_costOfLivingEnabled") === "true"}
+                onCheckedChange={(checked) => {
+                  localStorage.setItem("sim_costOfLivingEnabled", checked.toString());
+                  window.dispatchEvent(new Event("storage")); // Trigger update
+                  // Force re-render hack if needed, or better, use state. 
+                  // For now, simple reload or state update.
+                  window.location.reload();
+                }}
+              />
+            </div>
+
+            {localStorage.getItem("sim_costOfLivingEnabled") === "true" && (
+              <div className="flex items-center gap-4 mt-4 animate-fade-in">
+                <div className="flex-1">
+                  <Label htmlFor="baseCost">Budget Mensile Stimato (€)</Label>
+                  <Input
+                    id="baseCost"
+                    type="number"
+                    defaultValue={localStorage.getItem("sim_baseCost") || "500"}
+                    onChange={(e) => {
+                      localStorage.setItem("sim_baseCost", e.target.value);
+                      window.dispatchEvent(new Event("storage"));
+                    }}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex-1 pt-6 text-sm text-muted-foreground">
+                  <p>Questo importo verrà sottratto ogni mese nella proiezione futura.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Recurring Incomes */}
           <div className="widget-card mb-6">
             <div className="flex items-center justify-between mb-4">
@@ -191,7 +263,7 @@ const MonthlySettings = () => {
                 Aggiungi
               </Button>
             </div>
-            
+
             {incomes.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">Nessuna entrata ricorrente</p>
             ) : (
@@ -199,7 +271,7 @@ const MonthlySettings = () => {
                 {incomes.map((income) => {
                   const Icon = getIconComponent(income.icon);
                   return (
-                    <div 
+                    <div
                       key={income.id}
                       className={`flex items-center justify-between p-4 rounded-lg bg-secondary/50 ${!income.active ? 'opacity-50' : ''}`}
                     >
@@ -238,7 +310,7 @@ const MonthlySettings = () => {
                 Aggiungi
               </Button>
             </div>
-            
+
             {expenses.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">Nessuna spesa ricorrente</p>
             ) : (
@@ -246,7 +318,7 @@ const MonthlySettings = () => {
                 {expenses.map((expense) => {
                   const Icon = getIconComponent(expense.icon);
                   return (
-                    <div 
+                    <div
                       key={expense.id}
                       className={`flex items-center justify-between p-4 rounded-lg bg-secondary/50 ${!expense.active ? 'opacity-50' : ''}`}
                     >
@@ -286,7 +358,7 @@ const MonthlySettings = () => {
               {editingItem ? "Modifica" : "Aggiungi"} {itemType === "income" ? "Entrata" : "Spesa"}
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
@@ -297,7 +369,7 @@ const MonthlySettings = () => {
                 placeholder="es. Affitto"
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="amount">Importo (€)</Label>
               <Input
@@ -309,23 +381,53 @@ const MonthlySettings = () => {
                 placeholder="es. 650.00"
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="day">Giorno del mese</Label>
-              <Select value={formData.day} onValueChange={(value) => setFormData(prev => ({ ...prev, day: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona giorno" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 28 }, (_, i) => (
-                    <SelectItem key={i + 1} value={(i + 1).toString()}>
-                      {i + 1}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="day">Giorno</Label>
+                <Select value={formData.day} onValueChange={(value) => setFormData(prev => ({ ...prev, day: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Giorno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 31 }, (_, i) => (
+                      <SelectItem key={i + 1} value={(i + 1).toString()}>
+                        {i + 1}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="startMonth">Mese Inizio</Label>
+                <Select value={formData.startMonth} onValueChange={(value) => setFormData(prev => ({ ...prev, startMonth: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Mese" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"].map((m, i) => (
+                      <SelectItem key={i + 1} value={(i + 1).toString()}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="startYear">Anno</Label>
+                <Select value={formData.startYear} onValueChange={(value) => setFormData(prev => ({ ...prev, startYear: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Anno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[2025, 2026, 2027].map(y => (
+                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label>Icona</Label>
               <div className="grid grid-cols-5 gap-2">
@@ -347,7 +449,7 @@ const MonthlySettings = () => {
               </div>
             </div>
           </div>
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annulla</Button>
             <Button onClick={handleSave}>

@@ -9,11 +9,12 @@ const Header = forwardRef<HTMLElement>((_, ref) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  
+
   const navItems = [
     { path: "/", label: "Dashboard" },
     { path: "/transactions", label: "Transazioni" },
     { path: "/monthly-settings", label: "Impostazioni" },
+    { path: "/ai-assistant", label: "Assistente AI" },
   ];
 
   const handleLogout = async () => {
@@ -33,7 +34,7 @@ const Header = forwardRef<HTMLElement>((_, ref) => {
             <span className="text-xs text-muted-foreground -mt-0.5">Gestore Finanze</span>
           </div>
         </Link>
-        
+
         <nav className="hidden md:flex items-center gap-6">
           {navItems.map((item) => (
             <Link
@@ -49,7 +50,7 @@ const Header = forwardRef<HTMLElement>((_, ref) => {
               {item.label}
             </Link>
           ))}
-          
+
           {user && (
             <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2 text-muted-foreground hover:text-foreground">
               <LogOut className="w-4 h-4" />

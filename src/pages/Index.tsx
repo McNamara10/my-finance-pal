@@ -2,13 +2,15 @@ import Header from "@/components/Header";
 import DashboardNav from "@/components/DashboardNav";
 import BalanceWidget from "@/components/BalanceWidget";
 import ProjectionWidget from "@/components/ProjectionWidget";
-import SalaryWidget from "@/components/SalaryWidget";
-import ProjectionChart from "@/components/ProjectionChart";
+// import SalaryWidget from "@/components/SalaryWidget"; // Removed as per snippet
+// import ProjectionChart from "@/components/ProjectionChart"; // Replaced
+import AdvancedProjection from "@/components/AdvancedProjection";
 import TipCard from "@/components/TipCard";
 import RecentActivityLive from "@/components/RecentActivityLive";
 import FinancialHealth from "@/components/FinancialHealth";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useRecurringExpenses, useRecurringIncomes } from "@/hooks/useRecurringItems";
+import { useProjection } from "@/hooks/useProjection";
 import {
   addMonths,
   endOfMonth,
@@ -19,89 +21,91 @@ import {
   setDate,
   startOfDay,
   startOfMonth,
+  format, // Added format
 } from "date-fns";
+import { it } from 'date-fns/locale'; // Added locale
 
-const toShortItDate = (date: Date) =>
-  date.toLocaleDateString("it-IT", {
-    day: "numeric",
-    month: "short",
-  });
+const toShortItDate = (d: Date) => format(d, "d MMM", { locale: it }); // Modified to use format and locale
 
-const nextDateForDayOfMonth = (day: number, now: Date) => {
-  const candidate = setDate(now, day);
-  const today = startOfDay(now);
-  return isBefore(candidate, today) ? addMonths(candidate, 1) : candidate;
+const nextDateForDayOfMonth = (day: number, current: Date) => {
+  const candidate = setDate(current, day);
+  // If candidate is before today, move to next month
+  // But be careful: if today is 20th and day is 5th, next occurrence is 5th next month.
+  // If today is 20th and day is 25th, next occurrence is 25th this month.
+  // We want strictly future dates? Or today inclusive? usually future or today.
+
+  // Simple logic: if candidate < today (ignoring time), add 1 month.
+  // We compare timestamps to be safe or set times to 0.
+  const nowStart = new Date(current);
+  nowStart.setHours(0, 0, 0, 0);
+  const candStart = new Date(candidate);
+  candStart.setHours(0, 0, 0, 0);
+
+  return candStart < nowStart ? addMonths(candidate, 1) : candidate;
 };
 
 const Index = () => {
   const { transactions } = useTransactions();
-  const { incomes } = useRecurringIncomes();
-  const { expenses } = useRecurringExpenses();
+  const { incomes: activeIncomes } = useRecurringIncomes(); // Destructured to activeIncomes
+  const { expenses: activeExpenses } = useRecurringExpenses(); // Destructured to activeExpenses
 
   const now = new Date();
-  const monthStart = startOfMonth(now);
-  const monthEnd = endOfMonth(now);
+  const monthStart = startOfMonth(now); // Kept for potential future use, though not used in snippet
+  const monthEnd = endOfMonth(now); // Kept for potential future use, though not used in snippet
 
-  // Filtra solo le transazioni del mese corrente
-  const currentMonthTransactions = transactions.filter((t) => {
-    const txDate = parseISO(t.date);
-    return isSameMonth(txDate, now);
-  });
+  // Bilancio basato su TUTTE le transazioni fino ad oggi
+  const balance = transactions.reduce((sum, t) => sum + t.amount, 0);
 
-  const balance = currentMonthTransactions.reduce((sum, t) => sum + t.amount, 0);
+  // Use new Hook for advanced data
+  const projectionData = useProjection(balance, activeExpenses, activeIncomes);
 
-  const activeIncomes = incomes.filter((i) => i.active);
-  const activeExpenses = expenses.filter((e) => e.active);
+  const today = now.getDate(); // Kept for potential future use, though not used in snippet
 
-  const today = now.getDate();
+  // Algoritmo "Next Occurrence Only":
+  // Per ogni voce ricorrente, consideriamo solo la PROSSIMA occorrenza se cade entro la data target
+  // E se cade DOPO la data di inizio della ricorrenza.
+  const calculatePrudentProjection = (targetDate: Date, includeIncomes: boolean) => {
+    let projected = balance;
 
-  // Somma solo le entrate ricorrenti che devono ancora arrivare questo mese
-  const futureIncomeTotal = activeIncomes
-    .filter((i) => i.day > today)
-    .reduce((sum, i) => sum + i.amount, 0);
+    // Gestione Spese
+    activeExpenses.forEach(expense => {
+      if (!expense.active) return; // Added active check
+      const nextOccur = nextDateForDayOfMonth(expense.day, now);
+      const startDateStr = expense.start_date || '2026-01-01';
+      const startDate = parseISO(startDateStr);
+      if ((isBefore(nextOccur, targetDate) || isSameDay(nextOccur, targetDate)) &&
+        (isBefore(startDate, nextOccur) || isSameDay(startDate, nextOccur))) {
+        projected -= expense.amount;
+      }
+    });
 
-  // Somma solo le spese ricorrenti che devono ancora arrivare questo mese
-  const futureExpenseTotal = activeExpenses
-    .filter((e) => e.day > today)
-    .reduce((sum, e) => sum + e.amount, 0);
+    // Gestione Entrate
+    if (includeIncomes) {
+      activeIncomes.forEach(income => {
+        if (!income.active) return; // Added active check
+        const nextOccur = nextDateForDayOfMonth(income.day, now);
+        const startDateStr = income.start_date || '2026-01-01';
+        const startDate = parseISO(startDateStr);
+        if ((isBefore(nextOccur, targetDate) || isSameDay(nextOccur, targetDate)) &&
+          (isBefore(startDate, nextOccur) || isSameDay(startDate, nextOccur))) {
+          projected += income.amount;
+        }
+      });
+    }
 
-  const projectedBalance = balance + futureIncomeTotal - futureExpenseTotal;
-  const delta = projectedBalance - balance;
-  const deltaPct = balance !== 0 ? (delta / Math.abs(balance)) * 100 : 0;
+    // Add simulated Cost of Living for these specific dates?
+    // The user just enabled it in monthly settings.
+    // For consistency, let's include it if enabled, pro-rated?
+    // Or just keep these widgets simple as "Recurring only".
+    // User request was focused on the chart. Let's leave these widgets as "Recurring Projections" for now.
+    return projected;
+  };
 
-  const projectionDateLabel = toShortItDate(monthEnd);
+  const targetDate5 = setDate(addMonths(now, 1), 5);
+  const targetDate10 = setDate(addMonths(now, 1), 10);
 
-  // Calcola la data del prossimo stipendio (mese successivo)
-  const nextSalaryData = (() => {
-    if (activeIncomes.length === 0) return null;
-    
-    // Trova l'entrata principale (stipendio) - la prima per ordine di giorno
-    const mainIncome = activeIncomes[0];
-    const nextSalaryDate = addMonths(setDate(now, mainIncome.day), 1);
-    
-    // Calcola le spese rimanenti di questo mese (giorno > oggi)
-    const remainingThisMonthExpenses = activeExpenses
-      .filter((e) => e.day > today)
-      .reduce((sum, e) => sum + e.amount, 0);
-    
-    // Calcola le spese del mese prossimo prima dello stipendio
-    const nextMonthExpensesBeforeSalary = activeExpenses
-      .filter((e) => e.day < mainIncome.day)
-      .reduce((sum, e) => sum + e.amount, 0);
-    
-    // Proiezione = saldo attuale - spese rimanenti questo mese - spese prossimo mese prima dello stipendio + stipendio
-    const projectedAtSalary = balance - remainingThisMonthExpenses - nextMonthExpensesBeforeSalary + mainIncome.amount;
-    
-    return {
-      date: nextSalaryDate,
-      projectedBalance: projectedAtSalary,
-      salaryAmount: mainIncome.amount,
-    };
-  })();
-
-  const salaryDateLabel = nextSalaryData
-    ? toShortItDate(nextSalaryData.date)
-    : "—";
+  const projectedBalanceDay5 = calculatePrudentProjection(targetDate5, false);
+  const projectedBalanceDay10 = calculatePrudentProjection(targetDate10, true);
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,23 +117,31 @@ const Index = () => {
         {/* Financial Widgets */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <BalanceWidget balance={balance} />
+          {/* Specific Date Projections */}
+          {/* Proiezione 5 Marzo */}
           <ProjectionWidget
-            projectionDateLabel={projectionDateLabel}
-            projectedBalance={projectedBalance}
-            delta={delta}
-            deltaPct={deltaPct}
+            projectionDateLabel={toShortItDate(targetDate5)}
+            projectedBalance={projectedBalanceDay5}
+            delta={projectedBalanceDay5 - balance}
+            deltaPct={balance !== 0 ? ((projectedBalanceDay5 - balance) / Math.abs(balance)) * 100 : 0}
           />
-          <SalaryWidget
-            dateLabel={salaryDateLabel}
-            projectedBalance={nextSalaryData?.projectedBalance ?? 0}
-            salaryAmount={nextSalaryData?.salaryAmount ?? 0}
-            hasData={nextSalaryData !== null}
+
+          {/* Proiezione 10 Marzo */}
+          <ProjectionWidget
+            projectionDateLabel={toShortItDate(targetDate10)}
+            projectedBalance={projectedBalanceDay10}
+            delta={projectedBalanceDay10 - balance}
+            deltaPct={balance !== 0 ? ((projectedBalanceDay10 - balance) / Math.abs(balance)) * 100 : 0}
           />
         </div>
 
-        {/* Projection Chart */}
+        {/* Advanced Projection Chart */}
         <div className="mb-6">
-          <ProjectionChart />
+          <AdvancedProjection
+            data={projectionData}
+            expenses={activeExpenses}
+            incomes={activeIncomes}
+          />
         </div>
 
         {/* Tip Card */}
