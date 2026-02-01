@@ -1,73 +1,108 @@
-# Welcome to your Lovable project
+# MyFinance
 
-## Project info
+Personal finance management application built by **Marcello Orru**.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Tech Stack
 
-## How can I edit this code?
+- **Frontend**: React 18 + TypeScript + Vite
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Backend**: Supabase (PostgreSQL, Auth, Storage)
+- **Data Fetching**: TanStack Query (React Query)
+- **Routing**: React Router v6
 
-There are several ways of editing your application.
+## Getting Started
 
-**Use Lovable**
+### Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- Node.js 18+ & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to the project directory
+cd myfinance
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Create environment file
+cp .env.example .env.local
+
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env.local` file with:
 
-**Use GitHub Codespaces**
+```env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_anon_key
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Development
 
-## What technologies are used for this project?
+```sh
+# Start dev server
+npm run dev
 
-This project is built with:
+# Build for production
+npm run build
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Preview production build
+npm run preview
 
-## How can I deploy this project?
+# Run linting
+npm run lint
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Deployment
 
-## Can I connect a custom domain to my Lovable project?
+### Vercel (Recommended)
 
-Yes, you can!
+1. Push your code to GitHub
+2. Import the repository on [vercel.com](https://vercel.com)
+3. Add environment variables in Vercel dashboard
+4. Deploy
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Other Platforms
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+This project can be deployed to any platform that supports Node.js:
+- Netlify
+- Cloudflare Pages
+- Railway
+
+## Project Structure
+
+```
+src/
+├── components/     # UI components (shadcn/ui based)
+├── pages/          # Route pages
+├── hooks/          # Custom React hooks
+├── lib/            # Utilities and helpers
+├── integrations/   # Supabase client and types
+└── App.tsx         # Main app with routing
+```
+
+## Database
+
+This project uses Supabase as the backend. Database migrations are located in `supabase/migrations/`.
+
+To apply migrations to a new Supabase project:
+
+```sh
+supabase link --project-ref <your-project-ref>
+supabase db push
+```
+
+## Author
+
+**Marcello Orru**
+
+## License
+
+MIT
