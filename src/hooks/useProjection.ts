@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { addMonths, format, setDate, startOfDay, isBefore, isSameDay, parseISO } from 'date-fns';
+import { addMonths, format, setDate, isBefore, isAfter, isSameDay, parseISO, startOfDay, getDaysInMonth, lastDayOfMonth } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { RecurringItem } from './useRecurringItems';
 
@@ -10,62 +10,145 @@ interface ProjectionData {
     expenses: number;
     costOfLiving: number;
     net: number;
+    events: FinancialEvent[];
+}
+
+interface FinancialEvent {
+    date: Date;
+    amount: number;
+    type: 'income' | 'expense' | 'costOfLiving';
+    name?: string;
 }
 
 export const useProjection = (
     initialBalance: number,
     expenses: RecurringItem[],
-    incomes: RecurringItem[]
+    incomes: RecurringItem[],
+    targetDay: number = 5
 ) => {
     const [data, setData] = useState<ProjectionData[]>([]);
 
     useEffect(() => {
         const calculateProjection = () => {
-            const now = new Date();
-            let currentBalance = initialBalance;
-            const projection: ProjectionData[] = [];
+            const now = startOfDay(new Date());
 
             // Load Simulation Settings
             const simEnabled = localStorage.getItem("sim_costOfLivingEnabled") === "true";
             const simCost = simEnabled ? parseFloat(localStorage.getItem("sim_baseCost") || "500") : 0;
 
-            for (let i = 0; i < 12; i++) {
-                const targetDate = addMonths(now, i + 1);
-                // End of month projection usually, or same day next month. 
-                // Let's go with "End of Month" logic for clearer charts or "1st of next month".
-                // The user wants "Mese per mese", so let's project the balance at the END of each future month.
-                const monthEnd = setDate(targetDate, 1); // 1st of month (simplification for labeling)
+            // Generate all events for the next 13 months
+            const events: FinancialEvent[] = [];
+            const monthsToProject = 13; // Extra month to cover overlaps
+            const endDate = addMonths(now, monthsToProject);
 
-                let monthIncome = 0;
-                let monthExpenses = 0;
+            // Helper to add events
+            const addRecurringEvents = (items: RecurringItem[], type: 'income' | 'expense') => {
+                items.filter(item => item.active).forEach(item => {
+                    const itemStartDate = item.start_date ? startOfDay(parseISO(item.start_date)) : new Date('2020-01-01');
 
-                // Calculate active recurring items for this month
-                // We assume items occur once a month
-                incomes.filter(item => item.active).forEach(item => {
-                    // Simple check: does it start before this month?
-                    const startDate = item.start_date ? parseISO(item.start_date) : new Date('2020-01-01');
-                    if (isBefore(startDate, monthEnd) || isSameDay(startDate, monthEnd)) {
-                        monthIncome += item.amount;
+                    // Iterate through months to find occurrences
+                    let currentMonth = now;
+                    // We look back 1 month just in case the day is very close and we missed it? 
+                    // No, strict forward looking from 'now'.
+                    // Use a loop from current month up to end date
+                    for (let i = 0; i <= monthsToProject; i++) {
+                        const targetMonth = addMonths(now, i);
+                        const daysInMonth = getDaysInMonth(targetMonth);
+
+                        // Handle day overflow (e.g. 30th in Feb)
+                        // If item.day > daysInMonth, usually it executes on the last day
+                        const dayToSet = Math.min(item.day, daysInMonth);
+                        const eventDate = setDate(targetMonth, dayToSet);
+
+                        // Only add if it's today or in the future and after item start date
+                        if ((isAfter(eventDate, now) || isSameDay(eventDate, now)) && (isAfter(eventDate, itemStartDate) || isSameDay(eventDate, itemStartDate))) {
+                            events.push({
+                                date: eventDate,
+                                amount: item.amount,
+                                type,
+                                name: item.name
+                            });
+                        }
                     }
                 });
+            };
 
-                expenses.filter(item => item.active).forEach(item => {
-                    const startDate = item.start_date ? parseISO(item.start_date) : new Date('2020-01-01');
-                    if (isBefore(startDate, monthEnd) || isSameDay(startDate, monthEnd)) {
-                        monthExpenses += item.amount;
+            addRecurringEvents(incomes, 'income');
+            addRecurringEvents(expenses, 'expense');
+
+            // Add Cost of Living (assumed 1st of each month?)
+            if (simCost > 0) {
+                for (let i = 0; i <= monthsToProject; i++) {
+                    const targetMonth = addMonths(now, i);
+                    const eventDate = setDate(targetMonth, 1); // 1st of month
+                    if (isAfter(eventDate, now) || isSameDay(eventDate, now)) {
+                        events.push({
+                            date: eventDate,
+                            amount: simCost,
+                            type: 'costOfLiving',
+                            name: 'Budget Spese Preventivate'
+                        });
                     }
-                });
+                }
+            }
 
-                const net = monthIncome - monthExpenses - simCost;
-                currentBalance += net;
+            // Sort events by date
+            events.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+            // Calculate Projection Points (5th of each month)
+            const projection: ProjectionData[] = [];
+            let currentBalance = initialBalance;
+            let currentEventIndex = 0;
+
+            for (let i = 0; i < 13; i++) {
+                // Find the next occurrence of targetDay
+                let targetDate = setDate(addMonths(now, i), targetDay);
+
+                // If this target date is in the past, skip it for the projection points
+                if (isBefore(targetDate, now) && !isSameDay(targetDate, now)) {
+                    continue;
+                }
+
+                // We want to limit to 12 points
+                if (projection.length >= 12) break;
+
+                // Accumulate events up to this target date
+                let monthlyIncome = 0;
+                let monthlyExpenses = 0;
+                let monthlyCostOfLiving = 0;
+                const monthlyEvents: FinancialEvent[] = [];
+
+                while (currentEventIndex < events.length &&
+                    (isBefore(events[currentEventIndex].date, targetDate) || isSameDay(events[currentEventIndex].date, targetDate))) {
+
+                    const event = events[currentEventIndex];
+                    if (event.type === 'income') {
+                        currentBalance += event.amount;
+                        monthlyIncome += event.amount;
+                    } else if (event.type === 'expense') {
+                        currentBalance -= event.amount;
+                        monthlyExpenses += event.amount;
+                    } else if (event.type === 'costOfLiving') {
+                        currentBalance -= event.amount;
+                        monthlyCostOfLiving += event.amount;
+                    }
+                    monthlyEvents.push(event);
+                    currentEventIndex++;
+                }
+
+                // Note: monthlyIncome/Expenses here tracks the flow since the LAST projection point (or Now).
+                // But the UI labels it as "Income" for that month.
+                // This accumulation strategy shows "Flow since previous point".
+                // This is mathematically correct for the balance.
 
                 projection.push({
-                    month: format(monthEnd, "MMM", { locale: it }), // "Gen", "Feb"
+                    month: format(targetDate, "d MMM", { locale: it }),
                     balance: currentBalance,
-                    income: monthIncome,
-                    expenses: monthExpenses,
-                    costOfLiving: simCost,
-                    net: net
+                    income: monthlyIncome,
+                    expenses: monthlyExpenses,
+                    costOfLiving: monthlyCostOfLiving,
+                    net: monthlyIncome - monthlyExpenses - monthlyCostOfLiving,
+                    events: monthlyEvents
                 });
             }
 
@@ -73,15 +156,11 @@ export const useProjection = (
         };
 
         calculateProjection();
-
-        // Listen for storage events to update recalculation when settings change in another tab/window
-        // (Or same window if we dispatch event)
         const handleStorageChange = () => calculateProjection();
         window.addEventListener('storage', handleStorageChange);
-
         return () => window.removeEventListener('storage', handleStorageChange);
 
-    }, [initialBalance, expenses, incomes]);
+    }, [initialBalance, expenses, incomes, targetDay]);
 
     return data;
 };

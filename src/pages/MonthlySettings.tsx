@@ -216,8 +216,8 @@ const MonthlySettings = () => {
                   <ShoppingBag className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">Vita Quotidiana (Simulazione)</h2>
-                  <p className="text-sm text-muted-foreground">Simula una spesa mensile variabile per il calcolo della proiezione</p>
+                  <h2 className="text-lg font-semibold text-foreground">Budget Spese Preventivate</h2>
+                  <p className="text-sm text-muted-foreground">Pianifica un budget mensile per le spese variabili (es. spesa, uscite)</p>
                 </div>
               </div>
               <Switch
@@ -248,7 +248,7 @@ const MonthlySettings = () => {
                   />
                 </div>
                 <div className="flex-1 pt-6 text-sm text-muted-foreground">
-                  <p>Questo importo verrà sottratto ogni mese nella proiezione futura.</p>
+                  <p>Questo budget viene sottratto dal saldo attuale nel widget "Disponibilità Reale".</p>
                 </div>
               </div>
             )}

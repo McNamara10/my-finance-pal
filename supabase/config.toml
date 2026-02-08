@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.backup-api]
 verify_jwt = false
+
+[functions.financial-stats-api]
+verify_jwt = false

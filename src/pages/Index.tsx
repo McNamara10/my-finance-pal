@@ -5,6 +5,8 @@ import ProjectionWidget from "@/components/ProjectionWidget";
 // import SalaryWidget from "@/components/SalaryWidget"; // Removed as per snippet
 // import ProjectionChart from "@/components/ProjectionChart"; // Replaced
 import AdvancedProjection from "@/components/AdvancedProjection";
+import AvailabilityWidget from "@/components/AvailabilityWidget";
+import StatusWidget, { FinancialStatus } from "@/components/StatusWidget";
 import TipCard from "@/components/TipCard";
 import RecentActivityLive from "@/components/RecentActivityLive";
 import FinancialHealth from "@/components/FinancialHealth";
@@ -56,56 +58,81 @@ const Index = () => {
   // Bilancio basato su TUTTE le transazioni fino ad oggi
   const balance = transactions.reduce((sum, t) => sum + t.amount, 0);
 
-  // Use new Hook for advanced data
-  const projectionData = useProjection(balance, activeExpenses, activeIncomes);
+  // Calcolo "Saldo Effettivo" (include ricorrenti di OGGI non ancora accreditati)
+  const currentDay = now.getDate();
+  const transactionsToday = transactions.filter(t => isSameDay(parseISO(t.date), now));
 
-  const today = now.getDate(); // Kept for potential future use, though not used in snippet
+  const pendingTodayIncomes = activeIncomes
+    .filter(i => i.day === currentDay && i.active)
+    .filter(i => !transactionsToday.some(t => t.amount === i.amount))
+    .reduce((sum, i) => sum + i.amount, 0);
 
-  // Algoritmo "Next Occurrence Only":
-  // Per ogni voce ricorrente, consideriamo solo la PROSSIMA occorrenza se cade entro la data target
-  // E se cade DOPO la data di inizio della ricorrenza.
-  const calculatePrudentProjection = (targetDate: Date, includeIncomes: boolean) => {
-    let projected = balance;
+  const pendingTodayExpenses = activeExpenses
+    .filter(e => e.day === currentDay && e.active)
+    .filter(e => !transactionsToday.some(t => Math.abs(t.amount) === Math.abs(e.amount)))
+    .reduce((sum, e) => sum + e.amount, 0);
 
-    // Gestione Spese
-    activeExpenses.forEach(expense => {
-      if (!expense.active) return; // Added active check
-      const nextOccur = nextDateForDayOfMonth(expense.day, now);
-      const startDateStr = expense.start_date || '2026-01-01';
-      const startDate = parseISO(startDateStr);
-      if ((isBefore(nextOccur, targetDate) || isSameDay(nextOccur, targetDate)) &&
-        (isBefore(startDate, nextOccur) || isSameDay(startDate, nextOccur))) {
-        projected -= expense.amount;
-      }
-    });
+  const effectiveBalance = Math.round((balance + pendingTodayIncomes - pendingTodayExpenses) * 100) / 100;
 
-    // Gestione Entrate
-    if (includeIncomes) {
-      activeIncomes.forEach(income => {
-        if (!income.active) return; // Added active check
-        const nextOccur = nextDateForDayOfMonth(income.day, now);
-        const startDateStr = income.start_date || '2026-01-01';
-        const startDate = parseISO(startDateStr);
-        if ((isBefore(nextOccur, targetDate) || isSameDay(nextOccur, targetDate)) &&
-          (isBefore(startDate, nextOccur) || isSameDay(startDate, nextOccur))) {
-          projected += income.amount;
-        }
-      });
-    }
+  // Use new Hook for advanced data - Use effectiveBalance as starting point for projections? 
+  // Actually the hook uses initialBalance. If we want projections to NOT double count today's items if we already added them to initialBalance, 
+  // we need to be careful. useProjection already adds today's items. 
+  // So if we pass effectiveBalance (which includes today's items) to useProjection, 
+  // and useProjection ALSO adds today's items, we double count.
+  // We should pass the RAW balance (just transactions) and let useProjection handle the rest, 
+  // OR pass effectiveBalance and make useProjection start from strictly TOMORROW.
+  // But for the widget "Saldo Attuale", the user wants to see effectiveBalance.
 
-    // Add simulated Cost of Living for these specific dates?
-    // The user just enabled it in monthly settings.
-    // For consistency, let's include it if enabled, pro-rated?
-    // Or just keep these widgets simple as "Recurring only".
-    // User request was focused on the chart. Let's leave these widgets as "Recurring Projections" for now.
-    return projected;
-  };
+  const projectionData5 = useProjection(balance, activeExpenses, activeIncomes, 5);
+  const projectionData10 = useProjection(balance, activeExpenses, activeIncomes, 10);
 
+  // We want to verify consistency between the Widgets and the Chart.
+  // USER REQUIREMENT: Always show 5th and 10th of NEXT MONTH.
   const targetDate5 = setDate(addMonths(now, 1), 5);
   const targetDate10 = setDate(addMonths(now, 1), 10);
 
-  const projectedBalanceDay5 = calculatePrudentProjection(targetDate5, false);
-  const projectedBalanceDay10 = calculatePrudentProjection(targetDate10, true);
+  // Select the correct data point from projections. 
+  // projectionData5[0] might be this month's 5th if today < 5th. 
+  // Since we want NEXT MONTH, we find the first point that is in next month.
+  const projectedBalanceDay5 = projectionData5.find(p => {
+    const d = p.events && p.events.length > 0 ? p.events[0].date : null;
+    // Simple check: format the targetDate and find matching month string or index
+    return p.month.includes(format(targetDate5, "MMM", { locale: it }));
+  })?.balance || (projectionData5.length > 0 ? projectionData5[projectionData5.length - 1].balance : balance);
+
+  const projectedBalanceDay10 = projectionData10.find(p => {
+    return p.month.includes(format(targetDate10, "MMM", { locale: it }));
+  })?.balance || (projectionData10.length > 0 ? projectionData10[projectionData10.length - 1].balance : balance);
+
+  // Availability Calculation
+  const simEnabled = localStorage.getItem("sim_costOfLivingEnabled") === "true";
+  const simCost = simEnabled ? parseFloat(localStorage.getItem("sim_baseCost") || "500") : 0;
+
+  // Expenses remaining this month (after today inclusive)
+  const remainingFixedExpenses = activeExpenses
+    .filter(e => e.day >= currentDay && e.active)
+    // Filter out if already in today's transactions (we handle today's pending in effectiveBalance)
+    .filter(e => {
+      if (e.day === currentDay) {
+        return !transactionsToday.some(t => Math.abs(t.amount) === Math.abs(e.amount));
+      }
+      return true;
+    })
+    .reduce((sum, e) => sum + e.amount, 0);
+
+  const availability = Math.max(0, effectiveBalance - remainingFixedExpenses - simCost);
+
+  // Status Logic
+  const availabilityMargin = (effectiveBalance - remainingFixedExpenses) - simCost;
+  let financialStatus: FinancialStatus = "ok";
+  if (availabilityMargin < 0) {
+    financialStatus = "critical";
+  } else if (availabilityMargin <= 100) {
+    financialStatus = "warning";
+  }
+
+  // Safety Check: check if any projection point in the NEXT 30 DAYS is < 0
+  const isDanger = projectionData5.some(p => p.balance < 0) || projectionData10.some(p => p.balance < 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,29 +143,50 @@ const Index = () => {
 
         {/* Financial Widgets */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          <BalanceWidget balance={balance} />
+          <BalanceWidget balance={effectiveBalance} />
           {/* Specific Date Projections */}
           {/* Proiezione 5 Marzo */}
           <ProjectionWidget
             projectionDateLabel={toShortItDate(targetDate5)}
             projectedBalance={projectedBalanceDay5}
-            delta={projectedBalanceDay5 - balance}
-            deltaPct={balance !== 0 ? ((projectedBalanceDay5 - balance) / Math.abs(balance)) * 100 : 0}
+            delta={projectedBalanceDay5 - effectiveBalance}
+            deltaPct={effectiveBalance !== 0 ? ((projectedBalanceDay5 - effectiveBalance) / Math.abs(effectiveBalance)) * 100 : 0}
           />
 
           {/* Proiezione 10 Marzo */}
           <ProjectionWidget
             projectionDateLabel={toShortItDate(targetDate10)}
             projectedBalance={projectedBalanceDay10}
-            delta={projectedBalanceDay10 - balance}
-            deltaPct={balance !== 0 ? ((projectedBalanceDay10 - balance) / Math.abs(balance)) * 100 : 0}
+            delta={projectedBalanceDay10 - effectiveBalance}
+            deltaPct={effectiveBalance !== 0 ? ((projectedBalanceDay10 - effectiveBalance) / Math.abs(effectiveBalance)) * 100 : 0}
           />
+
+          {/* Availability Widget */}
+          <AvailabilityWidget availability={availability} />
+
+          {/* Status Widget */}
+          <StatusWidget status={financialStatus} margin={availabilityMargin} />
         </div>
+
+        {isDanger && (
+          <div className="mb-6 animate-in fade-in slide-in-from-top-4">
+            <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl flex items-center gap-3 text-destructive">
+              <div className="w-10 h-10 rounded-full bg-destructive/20 flex items-center justify-center shrink-0">
+                <span className="font-bold">!</span>
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Attenzione: Saldo Negativo Previsto</p>
+                <p className="text-xs opacity-80">Le proiezioni indicano che il tuo saldo potrebbe scendere sotto lo zero nel prossimo mese. Controlla le uscite pianificate.</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Advanced Projection Chart */}
         <div className="mb-6">
           <AdvancedProjection
-            data={projectionData}
+            data5={projectionData5}
+            data10={projectionData10}
             expenses={activeExpenses}
             incomes={activeIncomes}
           />
