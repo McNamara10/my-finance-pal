@@ -160,27 +160,23 @@ serve(async (req) => {
 
         const effectiveBalance = Math.round((rawBalance + missingAmount + pendingTodayIncomes - pendingTodayExpenses) * 100) / 100;
 
-        const budget = parseFloat(url.searchParams.get('budget') || '500');
+        // Match dashboard behavior: budget (simCost) is 0 unless explicitly enabled in UI
+        const budget = parseFloat(url.searchParams.get('budget') || '0');
 
-        // --- FINAL DASHBOARD ALIGNMENT LOGIC ---
-        // 1. To avoid double-counting, we start our projection from Yesterday's effective balance:
-        //    (Total Transactions) + (Missing items from previous months).
-        const yesterdayEndBalance = rawBalance + missingAmount;
-
+        // --- FINAL DASHBOARD ALIGNMENT ---
+        // Match Index.tsx: availability = minProjectedBalance - simCost
+        // And useProjection(effectiveBalance, ...)
         const getMinProjectedBalance = () => {
-            let minFound = 9999999;
+            let minFound = effectiveBalance;
 
-            // We check the next 12 months (0 = current month, 1 = next month, etc.)
             for (let m = 0; m <= 12; m++) {
                 [5, 10].forEach(targetDay => {
-                    let balanceForPoint = yesterdayEndBalance;
+                    let balanceForPoint = effectiveBalance;
                     const targetDate = new Date(now.getFullYear(), now.getMonth() + m, targetDay);
                     targetDate.setHours(23, 59, 59, 999);
 
-                    // Skip points in the past
                     if (targetDate < now && targetDate.toDateString() !== now.toDateString()) return;
 
-                    // Collect all events between Today (inclusive) and this checkpoint
                     // Recurring Incomes
                     (incomes || []).forEach(inc => {
                         const itemStart = inc.start_date ? new Date(inc.start_date) : new Date(2020, 0, 1);
@@ -191,9 +187,11 @@ serve(async (req) => {
                             const eventDate = new Date(iterMonth.getFullYear(), iterMonth.getMonth(), Math.min(inc.day, daysInMonth));
                             eventDate.setHours(12, 0, 0, 0);
 
-                            // Add if event is Today or Future, and within range, and active
+                            // Match useProjection.ts: if (isAfter(eventDate, now) || isSameDay(eventDate, now))
                             const isToday = eventDate.toDateString() === now.toDateString();
-                            if ((eventDate > now || isToday) && eventDate <= targetDate && eventDate >= itemStart) {
+                            const isFuture = eventDate > now;
+
+                            if ((isFuture || isToday) && eventDate <= targetDate && eventDate >= itemStart) {
                                 balanceForPoint += inc.amount;
                             }
                         }
@@ -210,7 +208,9 @@ serve(async (req) => {
                             eventDate.setHours(12, 0, 0, 0);
 
                             const isToday = eventDate.toDateString() === now.toDateString();
-                            if ((eventDate > now || isToday) && eventDate <= targetDate && eventDate >= itemStart) {
+                            const isFuture = eventDate > now;
+
+                            if ((isFuture || isToday) && eventDate <= targetDate && eventDate >= itemStart) {
                                 balanceForPoint -= exp.amount;
                             }
                         }
@@ -221,13 +221,10 @@ serve(async (req) => {
                     }
                 });
             }
-            // Fallback to effectiveBalance if no points found (shouldn't happen)
-            return minFound === 9999999 ? effectiveBalance : minFound;
+            return minFound;
         };
 
         const minProjectedBalance = getMinProjectedBalance();
-
-        // Final Availability = (Lowest point in 12 months) - (Budget)
         const availabilityMargin = Math.round((minProjectedBalance - budget) * 100) / 100;
         const availability = Math.max(0, availabilityMargin);
 
@@ -257,9 +254,9 @@ serve(async (req) => {
             currency: 'EUR',
             timestamp: now.toISOString(),
             _debug: {
-                yesterday_end_balance: yesterdayEndBalance,
+                effective_balance: effectiveBalance,
                 min_projected_12m: minProjectedBalance,
-                budget_subtracted: budget
+                budget_applied: budget
             }
         };
 
