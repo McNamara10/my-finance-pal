@@ -196,12 +196,12 @@ serve(async (req) => {
         }
 
         const responseData = {
-            total_balance: effectiveBalance,
-            monthly_expenses: Math.round(monthlyExpenses * 100) / 100,
+            totalbalance: effectiveBalance,
+            monthlyexpenses: Math.round(monthlyExpenses * 100) / 100,
             availability: availability,
-            availability_margin: availabilityMargin,
-            financial_status: financialStatus,
-            budget_used: budget,
+            availabilitymargin: availabilityMargin,
+            financialstatus: financialStatus,
+            budgetused: budget,
             currency: 'EUR',
             timestamp: now.toISOString()
         };
