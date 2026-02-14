@@ -196,22 +196,29 @@ serve(async (req) => {
         }
 
         const responseData = {
-            totalbalance: effectiveBalance,
-            monthlyexpenses: Math.round(monthlyExpenses * 100) / 100,
+            total_balance: effectiveBalance,
+            monthly_expenses: Math.round(monthlyExpenses * 100) / 100,
             availability: availability,
-            availabilitymargin: availabilityMargin,
-            financialstatus: financialStatus,
-            budgetused: budget,
+            availability_margin: availabilityMargin,
+            financial_status: financialStatus,
+            budget_used: budget,
             currency: 'EUR',
             timestamp: now.toISOString()
         };
 
         const field = url.searchParams.get('field');
-        if (field && responseData[field as keyof typeof responseData] !== undefined) {
-            return new Response(
-                JSON.stringify({ [field]: responseData[field as keyof typeof responseData] }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        if (field) {
+            const normalizedQueryField = field.replace(/_/g, '').toLowerCase();
+            const matchingKey = (Object.keys(responseData) as Array<keyof typeof responseData>).find(key =>
+                key.replace(/_/g, '').toLowerCase() === normalizedQueryField
             );
+
+            if (matchingKey) {
+                return new Response(
+                    JSON.stringify({ [field]: responseData[matchingKey] }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+            }
         }
 
         return new Response(
