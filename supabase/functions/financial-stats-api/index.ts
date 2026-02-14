@@ -162,35 +162,38 @@ serve(async (req) => {
 
         const budget = parseFloat(url.searchParams.get('budget') || '500');
 
-        // --- DASHBOARD PROJECTION LOGIC (MATCHING Index.tsx) ---
-        // 1. Calculate the minimum projected balance over the next 12 months at 5th and 10th checkpoints.
-        // 2. We only project Recurring Incomes and Expenses here (matching useProjection.ts when budget is handled separately).
-        const getMinProjectedBalance = () => {
-            let minBalance = effectiveBalance;
+        // --- FINAL DASHBOARD ALIGNMENT LOGIC ---
+        // 1. To avoid double-counting, we start our projection from Yesterday's effective balance:
+        //    (Total Transactions) + (Missing items from previous months).
+        const yesterdayEndBalance = rawBalance + missingAmount;
 
-            // We check the next 12 months
-            for (let m = 1; m <= 12; m++) {
+        const getMinProjectedBalance = () => {
+            let minFound = 9999999;
+
+            // We check the next 12 months (0 = current month, 1 = next month, etc.)
+            for (let m = 0; m <= 12; m++) {
                 [5, 10].forEach(targetDay => {
-                    let balanceForPoint = effectiveBalance;
+                    let balanceForPoint = yesterdayEndBalance;
                     const targetDate = new Date(now.getFullYear(), now.getMonth() + m, targetDay);
                     targetDate.setHours(23, 59, 59, 999);
 
-                    // Collect all events between Now and this checkpoint
+                    // Skip points in the past
+                    if (targetDate < now && targetDate.toDateString() !== now.toDateString()) return;
+
+                    // Collect all events between Today (inclusive) and this checkpoint
                     // Recurring Incomes
                     (incomes || []).forEach(inc => {
                         const itemStart = inc.start_date ? new Date(inc.start_date) : new Date(2020, 0, 1);
                         itemStart.setHours(0, 0, 0, 0);
-
-                        // Check occurrences for current and future months up to the point
                         for (let i = 0; i <= m; i++) {
                             const iterMonth = new Date(now.getFullYear(), now.getMonth() + i, 1);
                             const daysInMonth = new Date(iterMonth.getFullYear(), iterMonth.getMonth() + 1, 0).getDate();
                             const eventDate = new Date(iterMonth.getFullYear(), iterMonth.getMonth(), Math.min(inc.day, daysInMonth));
                             eventDate.setHours(12, 0, 0, 0);
 
-                            // Match Dashboard Bug: Index.tsx already has today's pending items in effectiveBalance,
-                            // but useProjection.ts ALSO adds them if eventDate is Today.
-                            if ((eventDate >= now || eventDate.toDateString() === now.toDateString()) && eventDate <= targetDate && eventDate >= itemStart) {
+                            // Add if event is Today or Future, and within range, and active
+                            const isToday = eventDate.toDateString() === now.toDateString();
+                            if ((eventDate > now || isToday) && eventDate <= targetDate && eventDate >= itemStart) {
                                 balanceForPoint += inc.amount;
                             }
                         }
@@ -200,31 +203,31 @@ serve(async (req) => {
                     (expenses || []).forEach(exp => {
                         const itemStart = exp.start_date ? new Date(exp.start_date) : new Date(2020, 0, 1);
                         itemStart.setHours(0, 0, 0, 0);
-
                         for (let i = 0; i <= m; i++) {
                             const iterMonth = new Date(now.getFullYear(), now.getMonth() + i, 1);
                             const daysInMonth = new Date(iterMonth.getFullYear(), iterMonth.getMonth() + 1, 0).getDate();
                             const eventDate = new Date(iterMonth.getFullYear(), iterMonth.getMonth(), Math.min(exp.day, daysInMonth));
                             eventDate.setHours(12, 0, 0, 0);
 
-                            if ((eventDate >= now || eventDate.toDateString() === now.toDateString()) && eventDate <= targetDate && eventDate >= itemStart) {
+                            const isToday = eventDate.toDateString() === now.toDateString();
+                            if ((eventDate > now || isToday) && eventDate <= targetDate && eventDate >= itemStart) {
                                 balanceForPoint -= exp.amount;
                             }
                         }
                     });
 
-                    if (balanceForPoint < minBalance) {
-                        minBalance = balanceForPoint;
+                    if (balanceForPoint < minFound) {
+                        minFound = balanceForPoint;
                     }
                 });
             }
-            return minBalance;
+            // Fallback to effectiveBalance if no points found (shouldn't happen)
+            return minFound === 9999999 ? effectiveBalance : minFound;
         };
 
         const minProjectedBalance = getMinProjectedBalance();
 
-        // Availability = (Lowest point in 12 months) - (Single budget deduction)
-        // This matches Index.tsx: availability = Math.max(0, minProjectedBalance - simCost);
+        // Final Availability = (Lowest point in 12 months) - (Budget)
         const availabilityMargin = Math.round((minProjectedBalance - budget) * 100) / 100;
         const availability = Math.max(0, availabilityMargin);
 
@@ -254,10 +257,9 @@ serve(async (req) => {
             currency: 'EUR',
             timestamp: now.toISOString(),
             _debug: {
-                raw_balance: rawBalance,
-                effective_balance: effectiveBalance,
+                yesterday_end_balance: yesterdayEndBalance,
                 min_projected_12m: minProjectedBalance,
-                budget_deducted: budget
+                budget_subtracted: budget
             }
         };
 
