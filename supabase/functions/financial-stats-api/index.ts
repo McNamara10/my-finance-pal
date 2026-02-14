@@ -163,8 +163,9 @@ serve(async (req) => {
         const budget = parseFloat(url.searchParams.get('budget') || '500');
 
         // --- 30-DAY PROJECTION LOGIC (MATCHING Dashboard Availability) ---
-        // We simulate day-by-day for the next 30 days to find the minimum balance reached.
-        let minProjectedBalance = effectiveBalance;
+        // We simulate day-by-day for the next 30 days to find the lowest balance point.
+        // We only project RECURRING items here, and subtract the budget manually once.
+        let minRunningBalance = effectiveBalance;
         let runningBalance = effectiveBalance;
 
         for (let i = 1; i <= 30; i++) {
@@ -176,16 +177,10 @@ serve(async (req) => {
             const projMonth = projectionDate.getMonth();
             const projYear = projectionDate.getFullYear();
 
-            // 1. Check for Recurring Budget (Cost of Living) on the 1st
-            if (projDay === 1) {
-                runningBalance -= budget;
-            }
-
-            // 2. Check for Recurring Incomes
+            // 1. Check for Recurring Incomes
             (incomes || []).forEach(income => {
                 const itemStart = income.start_date ? new Date(income.start_date) : new Date(2020, 0, 1);
                 itemStart.setHours(0, 0, 0, 0);
-
                 const daysInMonth = new Date(projYear, projMonth + 1, 0).getDate();
                 const dayToSet = Math.min(income.day, daysInMonth);
 
@@ -194,11 +189,10 @@ serve(async (req) => {
                 }
             });
 
-            // 3. Check for Recurring Expenses
+            // 2. Check for Recurring Expenses
             (expenses || []).forEach(expense => {
                 const itemStart = expense.start_date ? new Date(expense.start_date) : new Date(2020, 0, 1);
                 itemStart.setHours(0, 0, 0, 0);
-
                 const daysInMonth = new Date(projYear, projMonth + 1, 0).getDate();
                 const dayToSet = Math.min(expense.day, daysInMonth);
 
@@ -207,19 +201,14 @@ serve(async (req) => {
                 }
             });
 
-            if (runningBalance < minProjectedBalance) {
-                minProjectedBalance = runningBalance;
+            if (runningBalance < minRunningBalance) {
+                minRunningBalance = runningBalance;
             }
         }
 
-        // Availability calculation: min balance reached in 30 days, minus the budget margin 
-        // Logic in Index.tsx: availability = Math.max(0, minProjectedBalance - simCost);
-        // Note: Our day loop above already deducts budget if the 1st falls in the next 30 days.
-        // But dashboard budget is usually for "this month".
-        // Let's match the exact dashboard logic if possible.
-        // Dashboard uses min(...) of specific projection points.
-
-        const availabilityMargin = Math.round((minProjectedBalance) * 100) / 100;
+        // Final Availability = (Lowest balance in 30 days) - (Budget)
+        // This ensures the budget is only deducted ONCE, regardless of whether the projection hits the 1st of the month.
+        const availabilityMargin = Math.round((minRunningBalance - budget) * 100) / 100;
         const availability = Math.max(0, availabilityMargin);
 
         // 3. Calculate Monthly Expenses (Actuals)
