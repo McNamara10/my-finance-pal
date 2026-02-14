@@ -52,11 +52,12 @@ serve(async (req) => {
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
 
-        // 1. Fetch all transactions for balance
+        // 1. Fetch all transactions for balance (ordered by date to find the first one)
         const { data: transactions, error: txError } = await supabase
             .from('transactions')
             .select('*')
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .order('date', { ascending: true });
 
         if (txError) throw txError;
 
@@ -67,10 +68,82 @@ serve(async (req) => {
         ]);
 
         // Calculate raw balance
-        const rawBalance = transactions.reduce((sum, t) => sum + t.amount, 0);
+        const rawBalance = (transactions || []).reduce((sum, t) => sum + t.amount, 0);
 
-        // Calculate effective balance logic (same as Index.tsx)
-        const transactionsToday = transactions.filter(t => {
+        // --- RECONCILIATION LOGIC (MATCHING Index.tsx) ---
+        let missingAmount = 0;
+
+        if (transactions && transactions.length > 0 && incomes && expenses) {
+            // First transaction date is our anchor
+            const firstTxDate = new Date(transactions[0].date);
+            firstTxDate.setHours(0, 0, 0, 0);
+
+            // Reconciliation starts from 2026-01-01
+            let iterMonth = new Date(2026, 0, 1);
+            const todayStart = new Date(now);
+            todayStart.setHours(0, 0, 0, 0);
+
+            while (iterMonth <= todayStart) {
+                const iterYear = iterMonth.getFullYear();
+                const iterMonthIdx = iterMonth.getMonth();
+                const daysInMonth = new Date(iterYear, iterMonthIdx + 1, 0).getDate();
+
+                // Check Incomes
+                incomes.forEach(income => {
+                    const itemStart = income.start_date ? new Date(income.start_date) : new Date(2020, 0, 1);
+                    itemStart.setHours(0, 0, 0, 0);
+
+                    const dayToSet = Math.min(income.day, daysInMonth);
+                    const eventDate = new Date(iterYear, iterMonthIdx, dayToSet);
+
+                    if (eventDate < todayStart &&
+                        eventDate >= itemStart &&
+                        eventDate > firstTxDate) {
+
+                        const hasTx = transactions.some(t => {
+                            const d = new Date(t.date);
+                            return t.amount === income.amount &&
+                                d.getMonth() === iterMonthIdx &&
+                                d.getFullYear() === iterYear;
+                        });
+
+                        if (!hasTx) {
+                            missingAmount += income.amount;
+                        }
+                    }
+                });
+
+                // Check Expenses
+                expenses.forEach(expense => {
+                    const itemStart = expense.start_date ? new Date(expense.start_date) : new Date(2020, 0, 1);
+                    itemStart.setHours(0, 0, 0, 0);
+
+                    const dayToSet = Math.min(expense.day, daysInMonth);
+                    const eventDate = new Date(iterYear, iterMonthIdx, dayToSet);
+
+                    if (eventDate < todayStart &&
+                        eventDate >= itemStart &&
+                        eventDate > firstTxDate) {
+
+                        const hasTx = transactions.some(t => {
+                            const d = new Date(t.date);
+                            return Math.abs(t.amount) === Math.abs(expense.amount) &&
+                                d.getMonth() === iterMonthIdx &&
+                                d.getFullYear() === iterYear;
+                        });
+
+                        if (!hasTx) {
+                            missingAmount -= expense.amount;
+                        }
+                    }
+                });
+
+                iterMonth.setMonth(iterMonth.getMonth() + 1);
+            }
+        }
+
+        // Calculate "Pending Today" logic
+        const transactionsToday = (transactions || []).filter(t => {
             const d = new Date(t.date);
             return d.getDate() === currentDay && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         });
@@ -85,7 +158,7 @@ serve(async (req) => {
             .filter(e => !transactionsToday.some(t => Math.abs(t.amount) === Math.abs(e.amount)))
             .reduce((sum, e) => sum + e.amount, 0);
 
-        const effectiveBalance = Math.round((rawBalance + pendingTodayIncomes - pendingTodayExpenses) * 100) / 100;
+        const effectiveBalance = Math.round((rawBalance + missingAmount + pendingTodayIncomes - pendingTodayExpenses) * 100) / 100;
 
         const budget = parseFloat(url.searchParams.get('budget') || '500');
 
@@ -93,7 +166,7 @@ serve(async (req) => {
         const startOfMonth = new Date(currentYear, currentMonth, 1);
         const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
 
-        const monthlyExpenses = transactions
+        const monthlyExpenses = (transactions || [])
             .filter(t => {
                 const d = new Date(t.date);
                 return d >= startOfMonth && d <= endOfMonth && t.amount < 0;
