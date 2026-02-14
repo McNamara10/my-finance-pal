@@ -122,17 +122,27 @@ serve(async (req) => {
             financialStatus = 'warning';
         }
 
+        const responseData = {
+            total_balance: effectiveBalance,
+            monthly_expenses: Math.round(monthlyExpenses * 100) / 100,
+            availability: availability,
+            availability_margin: availabilityMargin,
+            financial_status: financialStatus,
+            budget_used: budget,
+            currency: 'EUR',
+            timestamp: now.toISOString()
+        };
+
+        const field = url.searchParams.get('field');
+        if (field && responseData[field as keyof typeof responseData] !== undefined) {
+            return new Response(
+                JSON.stringify({ [field]: responseData[field as keyof typeof responseData] }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        }
+
         return new Response(
-            JSON.stringify({
-                total_balance: effectiveBalance,
-                monthly_expenses: Math.round(monthlyExpenses * 100) / 100,
-                availability: availability,
-                availability_margin: availabilityMargin,
-                financial_status: financialStatus,
-                budget_used: budget,
-                currency: 'EUR',
-                timestamp: now.toISOString()
-            }),
+            JSON.stringify(responseData),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 

@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from 'react';
 import Header from "@/components/Header";
 import DashboardNav from "@/components/DashboardNav";
 import BalanceWidget from "@/components/BalanceWidget";
@@ -19,13 +20,19 @@ import {
   isBefore,
   isSameDay,
   isSameMonth,
+  isAfter,
   parseISO,
   setDate,
   startOfDay,
   startOfMonth,
-  format, // Added format
+  getDaysInMonth,
+  format,
 } from "date-fns";
-import { it } from 'date-fns/locale'; // Added locale
+import { it } from 'date-fns/locale';
+import { AlertCircle, CheckCircle2, PlusCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from 'sonner';
+import { Transaction } from "@/hooks/useTransactions";
 
 const toShortItDate = (d: Date) => format(d, "d MMM", { locale: it }); // Modified to use format and locale
 
@@ -47,32 +54,135 @@ const nextDateForDayOfMonth = (day: number, current: Date) => {
 };
 
 const Index = () => {
-  const { transactions } = useTransactions();
+  const { transactions, addTransaction } = useTransactions();
   const { incomes: activeIncomes } = useRecurringIncomes(); // Destructured to activeIncomes
   const { expenses: activeExpenses } = useRecurringExpenses(); // Destructured to activeExpenses
 
-  const now = new Date();
-  const monthStart = startOfMonth(now); // Kept for potential future use, though not used in snippet
-  const monthEnd = endOfMonth(now); // Kept for potential future use, though not used in snippet
+  const [isPosting, setIsPosting] = useState(false);
 
+  const now = useMemo(() => new Date(), []);
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+
+  // --- RECONCILIATION LOGIC ---
+  const getMissingRecurringItems = () => {
+    const missing: { item: any; date: string; type: 'income' | 'expense' }[] = [];
+    let missingAmount = 0;
+    const today = startOfDay(now);
+
+    if (!activeIncomes || !activeExpenses || !transactions || transactions.length === 0) {
+      return { missing: [], missingAmount: 0 };
+    }
+
+    // Identifichiamo la data della prima transazione (es. il "Saldo Attuale")
+    // Consideriamo solo ricorrenze che avvengono DOPO questa data per evitare doppi conteggi.
+    const firstTransactionDate = startOfDay(parseISO(transactions[transactions.length - 1].date));
+
+    // Iniziamo dal 1° Gennaio 2026 (o dalla data di inizio dell'app)
+    let currentMonth = startOfMonth(new Date(2026, 0, 1));
+
+    while (isBefore(currentMonth, now) || isSameMonth(currentMonth, now)) {
+      // Controlla Entrate
+      activeIncomes.forEach(income => {
+        const itemStartDate = income.start_date ? startOfDay(parseISO(income.start_date)) : new Date(2020, 0, 1);
+        const daysInMonth = getDaysInMonth(currentMonth);
+        const dayToSet = Math.min(income.day, daysInMonth);
+        const eventDate = setDate(currentMonth, dayToSet);
+
+        // Deve essere prima di oggi, dopo la data di inizio della ricorrenza E dopo la prima transazione registrata
+        if (isBefore(eventDate, today) &&
+          (isAfter(eventDate, itemStartDate) || isSameDay(eventDate, itemStartDate)) &&
+          isAfter(eventDate, firstTransactionDate)) {
+
+          const hasTransaction = transactions.some(t =>
+            t.amount === income.amount &&
+            isSameMonth(parseISO(t.date), currentMonth)
+          );
+          if (!hasTransaction) {
+            missing.push({ item: income, date: format(eventDate, "yyyy-MM-dd"), type: 'income' });
+            missingAmount += income.amount;
+          }
+        }
+      });
+
+      // Controlla Spese
+      activeExpenses.forEach(expense => {
+        const itemStartDate = expense.start_date ? startOfDay(parseISO(expense.start_date)) : new Date(2020, 0, 1);
+        const daysInMonth = getDaysInMonth(currentMonth);
+        const dayToSet = Math.min(expense.day, daysInMonth);
+        const eventDate = setDate(currentMonth, dayToSet);
+
+        if (isBefore(eventDate, today) &&
+          (isAfter(eventDate, itemStartDate) || isSameDay(eventDate, itemStartDate)) &&
+          isAfter(eventDate, firstTransactionDate)) {
+
+          const hasTransaction = transactions.some(t =>
+            Math.abs(t.amount) === Math.abs(expense.amount) &&
+            isSameMonth(parseISO(t.date), currentMonth)
+          );
+          if (!hasTransaction) {
+            missing.push({ item: expense, date: format(eventDate, "yyyy-MM-dd"), type: 'expense' });
+            missingAmount -= expense.amount;
+          }
+        }
+      });
+      currentMonth = addMonths(currentMonth, 1);
+    }
+    return { missing, missingAmount };
+  };
+
+  const { missing: missingItems, missingAmount } = useMemo(() => {
+    if (!transactions || !activeIncomes || !activeExpenses) {
+      return { missing: [], missingAmount: 0 };
+    }
+    return getMissingRecurringItems();
+  }, [transactions, activeIncomes, activeExpenses, now]);
+
+  const postAllMissing = async () => {
+    if (isPosting || missingItems.length === 0) return;
+    setIsPosting(true);
+    const toastId = toast.loading(`Inserimento di ${missingItems.length} transazioni...`);
+
+    try {
+      for (const m of missingItems) {
+        await addTransaction({
+          description: m.item.name,
+          amount: m.type === 'income' ? m.item.amount : -m.item.amount,
+          category: m.type === 'income' ? 'Entrata' : 'Spesa',
+          date: m.date,
+          icon: m.item.icon || 'creditcard'
+        });
+      }
+      toast.success("Transazioni inserite correttamente", { id: toastId });
+    } catch (error) {
+      console.error("Error posting missing transactions:", error);
+      toast.error("Si è verificato un errore durante l'inserimento", { id: toastId });
+    } finally {
+      setIsPosting(false);
+    }
+  };
   // Bilancio basato su TUTTE le transazioni fino ad oggi
-  const balance = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const balance = transactions ? transactions.reduce((sum, t) => sum + t.amount, 0) : 0;
 
   // Calcolo "Saldo Effettivo" (include ricorrenti di OGGI non ancora accreditati)
   const currentDay = now.getDate();
-  const transactionsToday = transactions.filter(t => isSameDay(parseISO(t.date), now));
+  const transactionsToday = transactions ? transactions.filter(t => isSameDay(parseISO(t.date), now)) : [];
 
   const pendingTodayIncomes = activeIncomes
-    .filter(i => i.day === currentDay && i.active)
-    .filter(i => !transactionsToday.some(t => t.amount === i.amount))
-    .reduce((sum, i) => sum + i.amount, 0);
+    ? activeIncomes
+      .filter(i => i.day === currentDay && i.active)
+      .filter(i => !transactionsToday.some(t => t.amount === i.amount))
+      .reduce((sum, i) => sum + i.amount, 0)
+    : 0;
 
   const pendingTodayExpenses = activeExpenses
-    .filter(e => e.day === currentDay && e.active)
-    .filter(e => !transactionsToday.some(t => Math.abs(t.amount) === Math.abs(e.amount)))
-    .reduce((sum, e) => sum + e.amount, 0);
+    ? activeExpenses
+      .filter(e => e.day === currentDay && e.active)
+      .filter(e => !transactionsToday.some(t => Math.abs(t.amount) === Math.abs(e.amount)))
+      .reduce((sum, e) => sum + e.amount, 0)
+    : 0;
 
-  const effectiveBalance = Math.round((balance + pendingTodayIncomes - pendingTodayExpenses) * 100) / 100;
+  const effectiveBalance = Math.round((balance + missingAmount + pendingTodayIncomes - pendingTodayExpenses) * 100) / 100;
 
   // Use new Hook for advanced data - Use effectiveBalance as starting point for projections? 
   // Actually the hook uses initialBalance. If we want projections to NOT double count today's items if we already added them to initialBalance, 
@@ -83,8 +193,8 @@ const Index = () => {
   // OR pass effectiveBalance and make useProjection start from strictly TOMORROW.
   // But for the widget "Saldo Attuale", the user wants to see effectiveBalance.
 
-  const projectionData5 = useProjection(balance, activeExpenses, activeIncomes, 5);
-  const projectionData10 = useProjection(balance, activeExpenses, activeIncomes, 10);
+  const projectionData5 = useProjection(effectiveBalance, activeExpenses, activeIncomes, 5);
+  const projectionData10 = useProjection(effectiveBalance, activeExpenses, activeIncomes, 10);
 
   // We want to verify consistency between the Widgets and the Chart.
   // USER REQUIREMENT: Always show 5th and 10th of NEXT MONTH.
@@ -104,26 +214,21 @@ const Index = () => {
     return p.month.includes(format(targetDate10, "MMM", { locale: it }));
   })?.balance || (projectionData10.length > 0 ? projectionData10[projectionData10.length - 1].balance : balance);
 
-  // Availability Calculation
+  // Availability Calculation - Safer approach: use the minimum projected balance in the next month
+  // This value represents what you can spend TODAY without ever going negative in the next 30 days.
+  const allProjectionPoints = [...projectionData5, ...projectionData10];
+  const minProjectedBalance = allProjectionPoints.length > 0
+    ? Math.min(...allProjectionPoints.map(p => p.balance))
+    : effectiveBalance;
+
   const simEnabled = localStorage.getItem("sim_costOfLivingEnabled") === "true";
   const simCost = simEnabled ? parseFloat(localStorage.getItem("sim_baseCost") || "500") : 0;
 
-  // Expenses remaining this month (after today inclusive)
-  const remainingFixedExpenses = activeExpenses
-    .filter(e => e.day >= currentDay && e.active)
-    // Filter out if already in today's transactions (we handle today's pending in effectiveBalance)
-    .filter(e => {
-      if (e.day === currentDay) {
-        return !transactionsToday.some(t => Math.abs(t.amount) === Math.abs(e.amount));
-      }
-      return true;
-    })
-    .reduce((sum, e) => sum + e.amount, 0);
-
-  const availability = Math.max(0, effectiveBalance - remainingFixedExpenses - simCost);
+  // The "Availability" is the minimum balance we expect to have, minus simulation costs.
+  const availability = Math.max(0, minProjectedBalance - simCost);
 
   // Status Logic
-  const availabilityMargin = (effectiveBalance - remainingFixedExpenses) - simCost;
+  const availabilityMargin = minProjectedBalance - simCost;
   let financialStatus: FinancialStatus = "ok";
   if (availabilityMargin < 0) {
     financialStatus = "critical";
